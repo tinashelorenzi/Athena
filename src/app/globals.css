@@ -1,0 +1,12 @@
+/* ============================================================
+   ATHENA DESIGN SYSTEM — Global entry point
+   Zaio Institute of Technology · SOC Simulation Lab
+   Import order matters: tailwind → fonts → tokens → base.
+   ============================================================ */
+@import "./tokens/fonts.css";
+@import "tailwindcss";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/elevation.css";
+@import "./tokens/base.css";

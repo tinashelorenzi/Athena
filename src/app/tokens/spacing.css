@@ -1,0 +1,56 @@
+/* ============================================================
+   ATHENA — Spacing & Layout
+   4px base grid. Compact, data-dense SOC layouts.
+   ============================================================ */
+
+:root {
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* ---- Component-scale spacing ---- */
+  --pad-control-x: 12px;   /* inputs, buttons */
+  --pad-control-y: 8px;
+  --pad-card: 20px;
+  --pad-panel: 24px;
+  --gap-inline: 8px;
+  --gap-stack: 12px;
+
+  /* ---- Layout dimensions ---- */
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 60px;
+  --topbar-h: 56px;
+  --row-h: 40px;          /* table / log rows */
+  --row-h-compact: 32px;
+  --content-max: 1440px;
+
+  /* ---- Radii ---- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ---- Control heights ---- */
+  --control-h-sm: 28px;
+  --control-h-md: 36px;
+  --control-h-lg: 44px;
+
+  /* ---- Z-index ---- */
+  --z-base: 0;          /* @kind other */
+  --z-sticky: 100;      /* @kind other */
+  --z-dropdown: 400;    /* @kind other */
+  --z-overlay: 800;     /* @kind other */
+  --z-modal: 900;       /* @kind other */
+  --z-toast: 1000;      /* @kind other */
+}

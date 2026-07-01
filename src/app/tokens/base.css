@@ -1,0 +1,46 @@
+/* ============================================================
+   ATHENA — Base resets & primitives
+   Kept minimal: consumers get sensible defaults but no
+   opinionated element styling beyond the SOC console baseline.
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv02', 'cv03', 'cv04';
+}
+
+::selection { background: rgba(84, 87, 232, 0.4); color: #fff; }
+
+a { color: var(--text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, kbd, samp { font-family: var(--font-mono); }
+
+/* ---- Custom scrollbars (SOC console) ---- */
+* { scrollbar-width: thin; scrollbar-color: var(--ink-600) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--ink-600);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-500); background-clip: content-box; }
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

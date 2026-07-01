@@ -1,0 +1,132 @@
+/* ============================================================
+   ATHENA — Color System
+   Dark-first SOC operations console.
+   Brand: Zaio blue (#2326B8) + yellow (#F9C80E) on deep,
+   blue-tinted near-black surfaces.
+   ============================================================ */
+
+:root {
+  /* ---- Brand: Blue scale (700 = Zaio brand blue) ---- */
+  --blue-950: #0D0E4A;
+  --blue-900: #14166E;
+  --blue-800: #1C1E96;
+  --blue-700: #2326B8; /* Zaio brand blue */
+  --blue-600: #3538D4;
+  --blue-500: #5457E8;
+  --blue-400: #7C7FF5;
+  --blue-300: #A6A8FF;
+  --blue-200: #C9CAFF;
+
+  /* ---- Brand: Yellow scale (500 = Zaio brand yellow) ---- */
+  --yellow-800: #8A6E00;
+  --yellow-700: #C79E00;
+  --yellow-600: #E0B400;
+  --yellow-500: #F9C80E; /* Zaio brand yellow */
+  --yellow-400: #FFD534;
+  --yellow-300: #FFE271;
+
+  /* ---- Neutrals: blue-tinted dark surfaces ---- */
+  --ink-1000: #05060D;
+  --ink-950:  #0A0B14; /* app background */
+  --ink-900:  #10121F; /* base panel */
+  --ink-850:  #14172699;
+  --ink-800:  #171A2B; /* raised card / surface */
+  --ink-750:  #1E2236; /* row hover / inset */
+  --ink-700:  #262B42; /* active / selected */
+  --ink-600:  #333A57;
+  --ink-500:  #4A5177;
+  --ink-400:  #6B7299;
+  --ink-300:  #9198BC;
+  --ink-200:  #C0C5E0;
+  --ink-100:  #E4E7F5;
+  --ink-000:  #F2F4FF;
+
+  /* ---- Semantic surfaces ---- */
+  --surface-app:        var(--ink-950);
+  --surface-panel:      var(--ink-900);
+  --surface-card:       var(--ink-800);
+  --surface-raised:     var(--ink-750);
+  --surface-inset:      var(--ink-1000);
+  --surface-hover:      var(--ink-750);
+  --surface-selected:   var(--ink-700);
+  --surface-overlay:    rgba(5, 6, 13, 0.72);
+
+  /* ---- Borders ---- */
+  --border-subtle:  #1F2438;
+  --border-default: #2A3049;
+  --border-strong:  #3A4166;
+  --border-focus:   var(--blue-500);
+
+  /* ---- Text ---- */
+  --text-primary:   var(--ink-000);
+  --text-secondary: var(--ink-300);
+  --text-tertiary:  var(--ink-400);
+  --text-disabled:  var(--ink-500);
+  --text-inverse:   #0A0B14;
+  --text-link:      var(--blue-400);
+  --text-on-brand:  #FFFFFF;
+  --text-on-accent: #1A1400;
+
+  /* ---- Brand semantic ---- */
+  --brand:            var(--blue-700);
+  --brand-hover:      var(--blue-600);
+  --brand-active:     var(--blue-800);
+  --brand-strong:     var(--blue-500);
+  --brand-subtle-bg:  rgba(84, 87, 232, 0.14);
+  --brand-subtle-border: rgba(84, 87, 232, 0.34);
+
+  --accent:           var(--yellow-500);
+  --accent-hover:     var(--yellow-400);
+  --accent-active:    var(--yellow-600);
+  --accent-subtle-bg: rgba(249, 200, 14, 0.14);
+  --accent-subtle-border: rgba(249, 200, 14, 0.40);
+
+  /* ---- Severity (SOC standard: crit → info) ---- */
+  --sev-critical:     #FF4D5E;
+  --sev-critical-bg:  rgba(255, 77, 94, 0.14);
+  --sev-critical-border: rgba(255, 77, 94, 0.40);
+
+  --sev-high:         #FF8A3D;
+  --sev-high-bg:      rgba(255, 138, 61, 0.14);
+  --sev-high-border:  rgba(255, 138, 61, 0.40);
+
+  --sev-medium:       var(--yellow-500);
+  --sev-medium-bg:    rgba(249, 200, 14, 0.14);
+  --sev-medium-border: rgba(249, 200, 14, 0.40);
+
+  --sev-low:          var(--blue-400);
+  --sev-low-bg:       rgba(124, 127, 245, 0.16);
+  --sev-low-border:   rgba(124, 127, 245, 0.40);
+
+  --sev-info:         var(--ink-400);
+  --sev-info-bg:      rgba(107, 114, 153, 0.16);
+  --sev-info-border:  rgba(107, 114, 153, 0.40);
+
+  /* ---- Status ---- */
+  --status-success:      #2ED47A;
+  --status-success-bg:   rgba(46, 212, 122, 0.14);
+  --status-success-border: rgba(46, 212, 122, 0.40);
+
+  --status-warning:      var(--yellow-500);
+  --status-warning-bg:   rgba(249, 200, 14, 0.14);
+
+  --status-danger:       #FF4D5E;
+  --status-danger-bg:    rgba(255, 77, 94, 0.14);
+
+  --status-info:         var(--blue-400);
+  --status-info-bg:      rgba(124, 127, 245, 0.16);
+
+  --status-neutral:      var(--ink-400);
+  --status-online:       #2ED47A;
+  --status-offline:      var(--ink-500);
+  --status-isolated:     #FF8A3D;
+
+  /* ---- Syntax highlighting (KQL / EQL / logs) ---- */
+  --syntax-field:    var(--blue-300);
+  --syntax-operator: #FF8A3D;
+  --syntax-value:    #2ED47A;
+  --syntax-string:   var(--yellow-300);
+  --syntax-keyword:  #FF6FC1;
+  --syntax-comment:  var(--ink-500);
+  --syntax-number:   var(--yellow-400);
+}
