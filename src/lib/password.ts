@@ -1,4 +1,5 @@
 import { hash, verify } from "@node-rs/argon2";
+import { randomInt } from "node:crypto";
 
 // @node-rs/argon2 exports `Algorithm` as an ambient `const enum`, which cannot
 // be referenced under TypeScript's `isolatedModules` (used by Next.js). We use
@@ -47,4 +48,36 @@ export async function verifyPassword(
   } catch {
     return false;
   }
+}
+
+// Character classes for generated passwords. `O/0` and `I/l/1` are omitted to
+// keep credentials easy to read aloud and transcribe without ambiguity.
+const LOWER = "abcdefghijkmnpqrstuvwxyz";
+const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const DIGITS = "23456789";
+const SYMBOLS = "!@#$%^&*-_=+";
+const ALL = LOWER + UPPER + DIGITS + SYMBOLS;
+
+/**
+ * Generate a cryptographically-random password. Used to issue credentials for
+ * provisioned accounts (instructors via CLI, students via the portal) since
+ * users never choose their own password at creation time.
+ *
+ * Guarantees at least one character from each class, then fills the rest from
+ * the full alphabet and shuffles — all draws use `crypto.randomInt` for an
+ * unbiased distribution.
+ */
+export function generatePassword(length = 20): string {
+  if (length < 8) throw new Error("Password length must be at least 8.");
+
+  const pick = (set: string) => set[randomInt(set.length)];
+  const chars = [pick(LOWER), pick(UPPER), pick(DIGITS), pick(SYMBOLS)];
+  while (chars.length < length) chars.push(pick(ALL));
+
+  // Fisher–Yates shuffle so the guaranteed characters aren't always in front.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }

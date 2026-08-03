@@ -1,22 +1,11 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
+import { requireUser } from '@/lib/auth';
 
-/* Authenticated console shell. This is a mock gate for the simulation:
-   auth state lives in localStorage (set by the login screen). Swap this for
-   a real session check when wiring server-side auth with the Argon2 helpers
-   in src/lib/password.ts. */
-export default function ConsoleLayout({ children }) {
-  const router = useRouter();
-  const [authed, setAuthed] = useState(null); // null = still checking
-
-  useEffect(() => {
-    const ok = typeof window !== 'undefined' && localStorage.getItem('athena.auth') === '1';
-    if (!ok) router.replace('/login');
-    else setAuthed(true);
-  }, [router]);
-
-  if (!authed) return null; // avoid a flash of the shell before the gate resolves
-  return <AppShell>{children}</AppShell>;
+/* Authenticated console shell. Server-side gate: unauthenticated users are
+   redirected to /login by requireUser(). The resolved user is handed to the
+   (client) AppShell for the footer + sign-out. Any authenticated role may use
+   the console; instructors are sent to /admin at login but can still view it. */
+export default async function ConsoleLayout({ children }) {
+  const user = await requireUser();
+  return <AppShell user={user}>{children}</AppShell>;
 }

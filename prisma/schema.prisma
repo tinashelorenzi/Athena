@@ -1,0 +1,168 @@
+// Athena — Prisma schema
+// Prisma 7: the new `prisma-client` generator emits an ES-module client into a
+// path you own (here: src/generated/prisma). Import it via `@/generated/prisma`.
+// Docs bundled locally under node_modules/prisma; see also https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 no longer accepts `url` here. The connection string for CLI/Migrate
+// lives in prisma.config.ts; the runtime client gets it via a driver adapter
+// (see src/lib/db.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+/// A console user. Accounts are provisioned — there is no public sign-up.
+/// SUPER_ADMIN (instructor) accounts are created with the `create:superadmin`
+/// CLI script; STUDENT accounts are created from the instructor portal.
+/// `passwordHash` holds an Argon2id PHC string produced by src/lib/password.ts.
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(STUDENT)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  assignments  Assignment[]
+  /// Architect is an elevated attribute on an instructor (SUPER_ADMIN): only
+  /// architects may author Dojo/Assessment scenarios. Granted via the
+  /// `promote:architect` CLI script.
+  isArchitect  Boolean   @default(false)
+
+  @@map("users")
+}
+
+/// A SOC scenario (from src/lib/data.js, e.g. "SC-07") assigned to a student by
+/// an instructor. `scenarioId` references the catalog id rather than a DB row,
+/// since scenarios are static content for now.
+model Assignment {
+  id           String           @id @default(cuid())
+  scenarioId   String
+  studentId    String
+  student      User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignedById String
+  status       AssignmentStatus @default(ASSIGNED)
+  dueAt        DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@unique([scenarioId, studentId])
+  @@index([studentId])
+  @@map("assignments")
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Platform-wide configuration as a namespaced key/value store (e.g.
+/// "security.turnstile.siteKey", "mail.smtp.host"). Secret values are stored
+/// encrypted (see src/lib/crypto.ts) and never returned raw to the client.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// An authored SOC scenario — a Dojo (teaching, used in lessons) or an
+/// Assessment (graded, counts toward reputation). The optional Json sections
+/// (logs, alerts, objectives, flags) plus per-endpoint EDR/OSQuery/artifacts
+/// define what the student sees as raw SOC data. See docs/scenario-schemas.md.
+model Scenario {
+  id             String             @id @default(cuid())
+  type           ScenarioType
+  title          String
+  description    String             @default("")
+  exposure       Exposure           @default(ROLLOUT)
+  /// Dojo-only: when true the scenario is reachable by direct link but hidden
+  /// from student listings.
+  hidden         Boolean            @default(false)
+  brief          String             @default("") @db.Text // markdown
+  objectives     Json? // [{ id, text }]
+  flags          Json? // [{ id, question, answer, points }] — answers are server-only
+  reportRequired Boolean            @default(false)
+  reportPrompt   String?            @db.Text
+  logs           Json? // { version, entries: [...] }
+  alerts         Json? // { version, alerts: [{ seek, ... }] }
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  endpoints      ScenarioEndpoint[]
+
+  @@index([type])
+  @@map("scenarios")
+}
+
+/// An endpoint within a scenario that carries EDR / OSQuery data and (optionally)
+/// an uploaded evidence artifact (a zip stored in object storage).
+model ScenarioEndpoint {
+  id           String   @id @default(cuid())
+  scenarioId   String
+  scenario     Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  hostname     String
+  edr          Json? // { processes, connections, browserHistory, shellHistory }
+  osquery      Json? // { tables: { processes: [...], listening_ports: [...], ... } }
+  artifactKey  String? // object-storage key for the evidence zip
+  artifactName String?
+  artifactSize Int?
+  createdAt    DateTime @default(now())
+
+  @@unique([scenarioId, hostname])
+  @@index([scenarioId])
+  @@map("scenario_endpoints")
+}
+
+enum ScenarioType {
+  DOJO
+  ASSESSMENT
+}
+
+enum Exposure {
+  ROLLOUT
+  PUBLIC
+}
+
+/// An API key for external integrations. Only the SHA-256 hash is stored; the
+/// raw key (prefixed `ath_`) is shown once at creation. `prefix` is the public,
+/// non-secret leading segment used to identify the key in listings.
+model ApiKey {
+  id          String    @id @default(cuid())
+  name        String
+  prefix      String
+  keyHash     String    @unique
+  createdById String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([prefix])
+  @@map("api_keys")
+}
+
+/// An authenticated login session. The browser holds an opaque random token;
+/// only its SHA-256 hash is stored here, so a database leak can't be replayed
+/// as a valid cookie. Sessions are revocable (deleted on logout / expiry).
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum Role {
+  SUPER_ADMIN
+  STUDENT
+}

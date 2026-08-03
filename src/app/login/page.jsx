@@ -1,12 +1,14 @@
-'use client';
-import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { LoginScreen } from '@/components/screens/LoginScreen';
+import { getCurrentUser, homeForRole } from '@/lib/auth';
+import { getTurnstilePublic } from '@/lib/settings';
+import { login } from '@/app/actions/auth';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const onLogin = () => {
-    localStorage.setItem('athena.auth', '1');
-    router.push('/alerts');
-  };
-  return <LoginScreen onLogin={onLogin} />;
+export default async function LoginPage() {
+  // Already signed in? Skip the form and go to the role's home.
+  const user = await getCurrentUser();
+  if (user) redirect(homeForRole(user.role));
+
+  const turnstile = await getTurnstilePublic();
+  return <LoginScreen action={login} turnstile={turnstile} />;
 }

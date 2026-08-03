@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { SidebarNav, IconButton, Avatar, Tooltip } from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { AthenaData } from '@/lib/data';
+import { logout } from '@/app/actions/auth';
 
 /* Athena app shell: sidebar nav + top bar + content region.
    Ported from the UI kit's view/setView SPA to real Next.js routing:
@@ -27,15 +28,16 @@ const TITLES = {
   osquery: 'OSQuery', intel: 'Threat Intelligence', firewall: 'Firewall & UTM', forensics: 'Forensics',
 };
 
-export function AppShell({ children }) {
+export function AppShell({ children, user }) {
   const router = useRouter();
   const pathname = usePathname();
   const view = (pathname || '/').split('/')[1] || 'alerts';
 
-  const onSignOut = () => {
-    if (typeof window !== 'undefined') localStorage.setItem('athena.auth', '0');
-    router.push('/login');
-  };
+  const displayName = user?.name || 'Analyst';
+  const roleLabel = user?.role === 'SUPER_ADMIN' ? 'Instructor · Admin' : 'Tier-1 · Student';
+  const isAdmin = user?.role === 'SUPER_ADMIN';
+
+  const onSignOut = () => { logout(); };
 
   const openAlerts = AthenaData.alerts.filter((a) => a.status === 'open').length;
   const items = NAV.map((n) =>
@@ -60,11 +62,16 @@ export function AppShell({ children }) {
         }
         footer={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 6px' }}>
-            <Avatar name="You Analyst" size="md" />
+            <Avatar name={displayName} size="md" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>You (Analyst)</div>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Tier-1 · Student</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{roleLabel}</div>
             </div>
+            {isAdmin && (
+              <Tooltip content="Instructor dashboard" placement="top">
+                <IconButton label="Instructor dashboard" onClick={() => router.push('/admin')}><Icon name="LayoutDashboard" size={16} /></IconButton>
+              </Tooltip>
+            )}
             <IconButton label="Sign out" onClick={onSignOut}><Icon name="LogOut" size={16} /></IconButton>
           </div>
         }

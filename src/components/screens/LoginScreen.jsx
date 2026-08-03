@@ -1,18 +1,31 @@
 'use client';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useActionState } from 'react';
 import { Button as LB, Input as LI } from '@/components/ds';
 import { Icon } from '@/components/Icon';
 
-/* Athena login — split brand panel + sign-in form. No registration. */
-export function LoginScreen({ onLogin }) {
-  const [email, setEmail] = React.useState('analyst@zaio.io');
-  const [pw, setPw] = React.useState('••••••••••');
-  const [busy, setBusy] = React.useState(false);
-  const submit = (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setTimeout(() => { setBusy(false); onLogin && onLogin(); }, 850);
-  };
+/* Athena login — split brand panel + sign-in form. No registration.
+   Same form for instructors and students; the server action redirects each
+   role to the right home (instructor → /admin, student → /alerts). When
+   Cloudflare Turnstile is enabled in platform settings, the widget is rendered
+   inside the form and its token is verified server-side by the login action. */
+export function LoginScreen({ action, turnstile }) {
+  const [state, formAction, pending] = useActionState(action, {});
+  const turnstileEnabled = Boolean(turnstile?.enabled && turnstile?.siteKey);
+
+  // Load the Turnstile script once when the challenge is enabled. The script
+  // auto-renders any `.cf-turnstile` element and injects a hidden
+  // `cf-turnstile-response` input into the surrounding form.
+  useEffect(() => {
+    if (!turnstileEnabled) return;
+    const SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    if (document.querySelector(`script[src="${SRC}"]`)) return;
+    const s = document.createElement('script');
+    s.src = SRC;
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, [turnstileEnabled]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--surface-app)' }}>
@@ -69,16 +82,31 @@ export function LoginScreen({ onLogin }) {
           <h2 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px' }}>Sign in</h2>
           <p style={{ fontSize: 14, color: 'var(--text-tertiary)', margin: '0 0 24px' }}>Use the credentials issued by your instructor.</p>
 
-          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <LI label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} leadingIcon={<Icon name="Mail" size={16} />} />
+          <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <LI label="Email" name="email" type="email" autoComplete="username" placeholder="you@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} />
             <div>
-              <LI label="Password" type="password" value={pw} onChange={(e) => setPw(e.target.value)} leadingIcon={<Icon name="Lock" size={16} />} />
+              <LI label="Password" name="password" type="password" autoComplete="current-password" placeholder="Your password" required leadingIcon={<Icon name="Lock" size={16} />} />
               <div style={{ textAlign: 'right', marginTop: 8 }}>
                 <a href="#" style={{ fontSize: 13 }}>Forgot password?</a>
               </div>
             </div>
-            <LB variant="primary" size="lg" block loading={busy} type="submit">
-              {busy ? 'Authenticating' : 'Sign in to Athena'}
+
+            {turnstileEnabled && (
+              <div className="cf-turnstile" data-sitekey={turnstile.siteKey} data-theme="dark" />
+            )}
+
+            {state?.error && (
+              <div role="alert" style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--radius-sm)',
+                background: 'var(--danger-subtle-bg, rgba(239,68,68,0.12))', border: '1px solid var(--danger-subtle-border, rgba(239,68,68,0.35))',
+              }}>
+                <Icon name="TriangleAlert" size={15} style={{ color: 'var(--status-danger, #ef4444)', flex: 'none' }} />
+                <span style={{ fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>{state.error}</span>
+              </div>
+            )}
+
+            <LB variant="primary" size="lg" block loading={pending} type="submit">
+              {pending ? 'Authenticating' : 'Sign in to Athena'}
             </LB>
           </form>
 
