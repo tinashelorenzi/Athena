@@ -33,8 +33,90 @@ model User {
   /// architects may author Dojo/Assessment scenarios. Granted via the
   /// `promote:architect` CLI script.
   isArchitect  Boolean   @default(false)
+  /// Students belong to a cohort (a bootcamp class/group).
+  cohortId     String?
+  cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  submissions  Submission[]
+  progress     ScenarioProgress[]
+  runs         ScenarioRun[]
 
+  @@index([cohortId])
   @@map("users")
+}
+
+/// A bootcamp cohort — a group of students. Scenarios are released to a whole
+/// cohort by binding them (CohortScenario).
+model Cohort {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  createdById String
+  createdAt   DateTime         @default(now())
+  students    User[]
+  scenarios   CohortScenario[]
+  invitations Invitation[]
+
+  @@map("cohorts")
+}
+
+/// Binds a scenario to a cohort — releasing it (including hidden dojos) to that
+/// cohort's students.
+model CohortScenario {
+  id         String    @id @default(cuid())
+  cohortId   String
+  cohort     Cohort    @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  scenarioId String
+  scenario   Scenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  boundById  String
+  releasedAt DateTime  @default(now())
+  dueAt      DateTime?
+
+  @@unique([cohortId, scenarioId])
+  @@index([cohortId])
+  @@index([scenarioId])
+  @@map("cohort_scenarios")
+}
+
+/// A pending bulk-invitation for a student. The email carries a tokened link to
+/// set a name + password; only the token hash is stored.
+model Invitation {
+  id          String    @id @default(cuid())
+  email       String
+  tokenHash   String    @unique
+  cohortId    String?
+  cohort      Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+  @@map("invitations")
+}
+
+/// A student's submitted deliverables for a scenario, graded by an instructor.
+model Submission {
+  id          String           @id @default(cuid())
+  scenarioId  String
+  scenario    Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  report      String?          @db.Text
+  flagAnswers Json? // { flagId: answer }
+  status      SubmissionStatus @default(SUBMITTED)
+  grade       Int?
+  feedback    String?          @db.Text
+  gradedById  String?
+  gradedAt    DateTime?
+  submittedAt DateTime         @default(now())
+
+  @@unique([scenarioId, studentId])
+  @@index([studentId])
+  @@map("submissions")
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  GRADED
 }
 
 /// A SOC scenario (from src/lib/data.js, e.g. "SC-07") assigned to a student by
@@ -81,6 +163,9 @@ model Scenario {
   type           ScenarioType
   title          String
   description    String             @default("")
+  /// Opaque token for the shareable reference link (`/s/<refToken>`) that can be
+  /// embedded in the LMS. Generated on create.
+  refToken       String?            @unique
   exposure       Exposure           @default(ROLLOUT)
   /// Dojo-only: when true the scenario is reachable by direct link but hidden
   /// from student listings.
@@ -96,9 +181,80 @@ model Scenario {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   endpoints      ScenarioEndpoint[]
+  cohorts        CohortScenario[]
+  submissions    Submission[]
+  progress       ScenarioProgress[]
+  runs           ScenarioRun[]
 
   @@index([type])
   @@map("scenarios")
+}
+
+/// A student's live run of a scenario. Holds a server-authoritative clock so the
+/// data feed (alerts/logs) fires by elapsed time, survives reloads, and supports
+/// pause/resume (dojos only). `accumulatedSeconds` is active time banked before
+/// the current running segment; `runningSince` marks the current segment start.
+model ScenarioRun {
+  id                 String     @id @default(cuid())
+  scenarioId         String
+  scenario           Scenario   @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status             RunStatus  @default(RUNNING)
+  startedAt          DateTime   @default(now())
+  runningSince       DateTime?
+  accumulatedSeconds Int        @default(0)
+  feedCursor         Int        @default(0) // seconds up to which events are materialized
+  lastTickAt         DateTime?
+  updatedAt          DateTime   @updatedAt
+  events             RunEvent[]
+
+  @@unique([scenarioId, studentId])
+  @@index([status])
+  @@map("scenario_runs")
+}
+
+/// A materialized feed event (an alert or log line that has "fired") — the
+/// stored state produced by the soc-master workers / load-time catch-up.
+model RunEvent {
+  id        String       @id @default(cuid())
+  runId     String
+  run       ScenarioRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  kind      RunEventKind
+  refId     String
+  atSeconds Int
+  firedAt   DateTime     @default(now())
+  payload   Json
+
+  @@unique([runId, kind, refId])
+  @@index([runId])
+  @@map("run_events")
+}
+
+enum RunStatus {
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum RunEventKind {
+  ALERT
+  LOG
+}
+
+/// Tracks when a student first opened a scenario — used to time alert `seek`
+/// reveals and to mark in-progress scenarios.
+model ScenarioProgress {
+  id         String   @id @default(cuid())
+  scenarioId String
+  scenario   Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  startedAt  DateTime @default(now())
+
+  @@unique([scenarioId, studentId])
+  @@index([studentId])
+  @@map("scenario_progress")
 }
 
 /// An endpoint within a scenario that carries EDR / OSQuery data and (optionally)

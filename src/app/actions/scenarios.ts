@@ -15,6 +15,7 @@ import {
   normalizeObjectives,
   normalizeFlags,
 } from "@/lib/scenario-schemas";
+import { newRefToken } from "@/lib/scenarios";
 
 export type ScenarioFormState = { error?: string; ok?: string };
 
@@ -101,6 +102,7 @@ export async function createScenario(
       flags: flags.length ? flags : undefined,
       logs: logs ?? undefined,
       alerts: alerts ?? undefined,
+      refToken: newRefToken(),
       createdById: architect.id,
     },
   });

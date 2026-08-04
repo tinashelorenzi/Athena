@@ -7,18 +7,22 @@ import { requireRole } from '@/lib/auth';
 export default async function StudentsPage() {
   await requireRole('SUPER_ADMIN');
 
-  const students = await prisma.user.findMany({
-    where: { role: 'STUDENT' },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, name: true, email: true, createdAt: true },
-  });
+  const [students, cohorts] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, email: true, createdAt: true, cohort: { select: { name: true } } },
+    }),
+    prisma.cohort.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+  ]);
 
   const rows = students.map((s) => ({
     id: s.id,
     name: s.name,
     email: s.email,
+    cohort: s.cohort?.name ?? '—',
     createdAt: s.createdAt.toISOString(),
   }));
 
-  return <StudentsManager students={rows} />;
+  return <StudentsManager students={rows} cohorts={cohorts} />;
 }

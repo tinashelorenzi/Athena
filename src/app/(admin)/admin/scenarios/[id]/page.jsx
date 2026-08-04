@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { ScenarioEditor } from '@/components/screens/ScenarioEditor';
 import { prisma } from '@/lib/db';
 import { requireArchitect } from '@/lib/auth';
+import { ensureRefToken } from '@/lib/scenarios';
 
 /* Scenario detail / editor — architect-only. Edit basics + manage endpoints. */
 export default async function ScenarioDetailPage({ params }) {
@@ -14,8 +15,11 @@ export default async function ScenarioDetailPage({ params }) {
   });
   if (!scenario) notFound();
 
+  const refToken = await ensureRefToken(scenario.id);
+
   const view = {
     id: scenario.id,
+    refToken,
     type: scenario.type,
     title: scenario.title,
     description: scenario.description,

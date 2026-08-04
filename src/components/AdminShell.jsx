@@ -11,6 +11,7 @@ const NAV = [
   { section: 'Instructor' },
   { id: 'admin', label: 'Dashboard', ic: 'LayoutDashboard' },
   { id: 'students', label: 'Students', ic: 'Users' },
+  { id: 'cohorts', label: 'Cohorts', ic: 'GraduationCap' },
   { id: 'assignments', label: 'Assignments', ic: 'ClipboardList' },
   { section: 'Authoring', architectOnly: true },
   { id: 'scenarios', label: 'Scenarios', ic: 'Boxes', architectOnly: true },
@@ -21,6 +22,7 @@ const NAV = [
 const TITLES = {
   admin: 'Instructor Dashboard',
   students: 'Student Management',
+  cohorts: 'Cohorts',
   assignments: 'Assignment Scenarios',
   scenarios: 'Scenario Authoring',
   settings: 'Settings',

@@ -56,4 +56,18 @@ export async function deleteObject(key: string): Promise<void> {
   await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key })).catch(() => {});
 }
 
+/** Fetch an object as a web ReadableStream (for streaming downloads to clients). */
+export async function getObjectStream(
+  key: string,
+): Promise<{ stream: ReadableStream; contentType: string; size?: number }> {
+  const { client, cfg } = await getClient();
+  const obj = await client.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }));
+  const body = obj.Body as { transformToWebStream: () => ReadableStream };
+  return {
+    stream: body.transformToWebStream(),
+    contentType: obj.ContentType ?? "application/octet-stream",
+    size: obj.ContentLength,
+  };
+}
+
 export { GetObjectCommand };

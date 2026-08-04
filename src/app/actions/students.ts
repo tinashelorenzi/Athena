@@ -21,7 +21,7 @@ export async function createStudent(
   _prevState: CreateStudentState,
   formData: FormData,
 ): Promise<CreateStudentState> {
-  await requireRole("SUPER_ADMIN");
+  const admin = await requireRole("SUPER_ADMIN");
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -32,6 +32,18 @@ export async function createStudent(
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return { error: `An account already exists for ${email}.` };
 
+  // Optional cohort: a new name takes precedence, else an existing id.
+  const newCohortName = String(formData.get("newCohortName") ?? "").trim();
+  let cohortId: string | null = String(formData.get("cohortId") ?? "") || null;
+  if (newCohortName) {
+    const cohort = await prisma.cohort.upsert({
+      where: { name: newCohortName },
+      update: {},
+      create: { name: newCohortName, createdById: admin.id },
+    });
+    cohortId = cohort.id;
+  }
+
   const password = generatePassword();
   await prisma.user.create({
     data: {
@@ -39,6 +51,7 @@ export async function createStudent(
       email,
       passwordHash: await hashPassword(password),
       role: "STUDENT",
+      cohortId,
     },
   });
 

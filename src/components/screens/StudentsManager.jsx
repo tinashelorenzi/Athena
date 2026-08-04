@@ -6,7 +6,7 @@ import { createStudent, resetStudentPassword, deleteStudent } from '@/app/action
 
 /* Student Management surface. Data (the `students` list) comes from the server
    page; mutations go through Server Actions which revalidate the list. */
-export function StudentsManager({ students }) {
+export function StudentsManager({ students, cohorts = [] }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState(null);
   const [creating, startCreate] = useTransition();
@@ -15,8 +15,9 @@ export function StudentsManager({ students }) {
   const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
+  const [cohortSel, setCohortSel] = useState('');
 
-  const openCreate = () => { setCreateError(null); setCreateOpen(true); };
+  const openCreate = () => { setCreateError(null); setCohortSel(''); setCreateOpen(true); };
 
   // Call the Server Action directly and handle the result in the submit handler
   // (no effect needed). The action revalidates the list server-side.
@@ -96,7 +97,8 @@ export function StudentsManager({ students }) {
             columns={[
               { key: 'name', header: 'Name', primary: true },
               { key: 'email', header: 'Email', mono: true },
-              { key: 'createdAt', header: 'Added', width: '130px', mono: true, render: (v) => new Date(v).toISOString().slice(0, 10) },
+              { key: 'cohort', header: 'Cohort', width: '160px' },
+              { key: 'createdAt', header: 'Added', width: '120px', mono: true, render: (v) => new Date(v).toISOString().slice(0, 10) },
               {
                 key: 'id', header: '', width: '210px', align: 'right',
                 render: (_v, row) => (
@@ -127,6 +129,15 @@ export function StudentsManager({ students }) {
         <form onSubmit={onCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} />
           <AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} />
+          <AC.Select
+            label="Cohort (optional)"
+            value={cohortSel}
+            onChange={(e) => setCohortSel(e.target.value)}
+            options={[{ value: '', label: 'No cohort' }, ...cohorts.map((c) => ({ value: c.id, label: c.name })), { value: '__new__', label: '＋ New cohort…' }]}
+          />
+          {cohortSel === '__new__'
+            ? <AC.Input name="newCohortName" placeholder="New cohort name" required leadingIcon={<Icon name="GraduationCap" size={16} />} />
+            : <input type="hidden" name="cohortId" value={cohortSel} />}
           {createError && (
             <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
               <Icon name="TriangleAlert" size={15} /> {createError}

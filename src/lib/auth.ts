@@ -26,7 +26,7 @@ function hashToken(token: string): string {
 
 /** Home route for a role, used after login and for role mismatches. */
 export function homeForRole(role: Role): string {
-  return role === "SUPER_ADMIN" ? "/admin" : "/alerts";
+  return role === "SUPER_ADMIN" ? "/admin" : "/learn";
 }
 
 /** Create a session for `userId` and set the cookie. Server Action / Route Handler only. */

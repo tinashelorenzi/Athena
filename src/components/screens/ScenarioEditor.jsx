@@ -34,6 +34,8 @@ export function ScenarioEditor({ scenario, endpoints }) {
 
       {error && <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />}
 
+      {scenario.refToken && <ReferenceLink token={scenario.refToken} />}
+
       <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <ScenarioFields mode="edit" initial={scenario} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
@@ -118,6 +120,26 @@ function EndpointsManager({ scenarioId, endpoints, onError }) {
           <AC.Button type="submit" variant="secondary" loading={saving} leadingIcon={<Icon name="Plus" size={14} />}>Save endpoint</AC.Button>
         </div>
       </form>
+    </AC.Card>
+  );
+}
+
+function ReferenceLink({ token }) {
+  const [copied, setCopied] = useState(false);
+  const path = `/s/${token}`;
+  const copy = async () => {
+    try {
+      const url = (typeof window !== 'undefined' ? window.location.origin : '') + path;
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch { /* clipboard blocked */ }
+  };
+  return (
+    <AC.Card header={<HeaderRow icon="Link" title="Reference link" subtitle="Embed in the LMS / learning materials — students land straight in this scenario." />}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <code style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text-secondary)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '9px 12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{path}</code>
+        <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copy}>{copied ? 'Copied' : 'Copy link'}</AC.Button>
+      </div>
     </AC.Card>
   );
 }
