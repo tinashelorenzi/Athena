@@ -30,6 +30,9 @@ export function ScenarioEditor({ scenario, endpoints }) {
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{scenario.id}</div>
         </div>
+        <Link href={`/admin/scenarios/${scenario.id}/preview`} style={{ textDecoration: 'none' }}>
+          <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="Play" size={14} />}>Preview</AC.Button>
+        </Link>
         <AC.Button variant="outline-danger" size="sm" leadingIcon={<Icon name="Trash2" size={14} />} onClick={() => setConfirmDel(true)}>Delete</AC.Button>
       </div>
 

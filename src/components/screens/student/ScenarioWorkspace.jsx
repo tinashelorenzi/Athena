@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useEffect, useActionState, useTransition } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useActionState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
@@ -7,6 +7,7 @@ import { Markdown } from '@/components/Markdown';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
 import { AlertCaseDialog } from './AlertCaseDialog';
+import { feedAtClient } from './previewFeed';
 import { submitScenario } from '@/app/actions/submissions';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 
@@ -21,7 +22,7 @@ const BASE_PANELS = [
 
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 
-export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, initialCases }) {
+export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, initialCases, preview = false }) {
   const router = useRouter();
   const PANELS = scenario.hasGuide ? [{ id: 'guide', label: 'Guide', icon: 'GraduationCap' }, ...BASE_PANELS] : BASE_PANELS;
   const [panel, setPanel] = useState(scenario.hasGuide ? 'guide' : 'brief');
@@ -31,6 +32,10 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   const [cases, setCases] = useState(initialCases || {});
   const [caseAlert, setCaseAlert] = useState(null);
 
+  // Preview mode: an ephemeral, client-side clock (no server actions, no storage).
+  const startRef = useRef(0);
+  const accumRef = useRef(0);
+
   const canPause = scenario.type === 'DOJO' && !scenario.realtime;
 
   const hasRun = run.status !== 'NONE';
@@ -39,7 +44,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   // Live feed over WebSocket (real-time push). Falls back to polling if the
   // socket can't connect (e.g. nginx `/ws` upgrade not configured).
   useEffect(() => {
-    if (!hasRun || typeof window === 'undefined') return;
+    if (preview || !hasRun || typeof window === 'undefined') return;
     let socket;
     let closed = false;
     let retry;
@@ -61,7 +66,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
   // Poll fallback while running when the WebSocket isn't connected.
   useEffect(() => {
-    if (run.status !== 'RUNNING' || wsOpen) return;
+    if (preview || run.status !== 'RUNNING' || wsOpen) return;
     let active = true;
     const poll = async () => {
       try {
@@ -77,10 +82,41 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
   // Smooth local clock between polls.
   useEffect(() => {
-    if (run.status !== 'RUNNING') return;
+    if (preview || run.status !== 'RUNNING') return;
     const id = setInterval(() => setRun((r) => ({ ...r, elapsed: (r.elapsed ?? 0) + 1 })), 1000);
     return () => clearInterval(id);
-  }, [run.status]);
+  }, [preview, run.status]);
+
+  // Preview clock: advance elapsed + recompute the fired feed entirely client-side.
+  useEffect(() => {
+    if (!preview || run.status !== 'RUNNING') return;
+    const id = setInterval(() => {
+      const e = Math.floor(accumRef.current + (Date.now() - startRef.current) / 1000);
+      setRun((r) => ({ ...r, elapsed: e, ...feedAtClient(scenario.rawAlerts, scenario.rawLogs, e) }));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [preview, run.status, scenario.rawAlerts, scenario.rawLogs]);
+
+  // Run controls — server actions normally; local clock in preview.
+  const doRun = () => {
+    if (!preview) return act(startRun);
+    accumRef.current = 0; startRef.current = Date.now();
+    setRun((r) => ({ ...r, status: 'RUNNING', elapsed: 0, ...feedAtClient(scenario.rawAlerts, scenario.rawLogs, 0) }));
+  };
+  const doPause = () => {
+    if (!preview) return act(pauseRun);
+    const e = Math.floor(accumRef.current + (Date.now() - startRef.current) / 1000);
+    accumRef.current = e; setRun((r) => ({ ...r, status: 'PAUSED', elapsed: e }));
+  };
+  const doResume = () => {
+    if (!preview) return act(resumeRun);
+    startRef.current = Date.now(); setRun((r) => ({ ...r, status: 'RUNNING' }));
+  };
+  const doComplete = () => {
+    if (!preview) return act(completeRun);
+    const e = Math.floor(accumRef.current + (run.status === 'RUNNING' ? (Date.now() - startRef.current) / 1000 : 0));
+    accumRef.current = e; setRun((r) => ({ ...r, status: 'COMPLETED', elapsed: e }));
+  };
 
   const act = (fn) => {
     setErr(null);
@@ -97,7 +133,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
   const left = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-      <AC.IconButton label="Back to scenarios" onClick={() => router.push('/learn')}><Icon name="ArrowLeft" size={18} /></AC.IconButton>
+      <AC.IconButton label="Back" onClick={() => router.push(preview ? `/admin/scenarios/${scenario.id}` : '/learn')}><Icon name="ArrowLeft" size={18} /></AC.IconButton>
       <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>{scenario.title}</span>
       <AC.Badge tone={scenario.type === 'ASSESSMENT' ? 'accent' : 'brand'} square>{scenario.type === 'ASSESSMENT' ? 'Assessment' : 'Dojo'}</AC.Badge>
     </div>
@@ -109,7 +145,8 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
       {/* run control bar */}
       <div style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
-        <RunControls run={run} canPause={canPause} realtime={scenario.realtime} busy={busy} onRun={() => act(startRun)} onPause={() => act(pauseRun)} onResume={() => act(resumeRun)} onComplete={() => act(completeRun)} />
+        <RunControls run={run} canPause={canPause} realtime={scenario.realtime} busy={busy} onRun={doRun} onPause={doPause} onResume={doResume} onComplete={doComplete} />
+        {preview && <AC.Badge tone="accent" square>Preview</AC.Badge>}
         <div style={{ flex: 1 }} />
         {scenario.realtime && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--status-danger, #ef4444)' }}>
@@ -142,7 +179,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
             {panel === 'guide' && (
               <div>
                 <PanelTitle icon="GraduationCap" title="Guide" sub="Work through the guide and solve the prompts as you go." />
-                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} />
+                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} preview={preview} />
               </div>
             )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
@@ -150,7 +187,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
             {panel === 'logs' && <FeedPanel kind="logs" run={run} />}
             {panel === 'endpoints' && <EndpointsPanel endpoints={scenario.endpoints} />}
             {panel === 'artifacts' && <ArtifactsPanel endpoints={scenario.endpoints} />}
-            {panel === 'submit' && <SubmitPanel scenario={scenario} submission={submission} />}
+            {panel === 'submit' && <SubmitPanel scenario={scenario} submission={submission} preview={preview} />}
           </div>
         </main>
       </div>
@@ -160,6 +197,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
         alert={caseAlert}
         caseData={caseAlert ? cases[caseAlert.id] : null}
         scenarioId={scenario.id}
+        preview={preview}
         onClose={() => setCaseAlert(null)}
         onError={setErr}
         onSaved={(alertId, data) => setCases((c) => ({ ...c, [alertId]: data }))}
@@ -439,7 +477,7 @@ function ArtifactsPanel({ endpoints }) {
   );
 }
 
-function SubmitPanel({ scenario, submission }) {
+function SubmitPanel({ scenario, submission, preview }) {
   const [state, action, saving] = useActionState(submitScenario.bind(null, scenario.id), {});
   const answers = submission?.flagAnswers || {};
   return (
@@ -460,7 +498,7 @@ function SubmitPanel({ scenario, submission }) {
         <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name="Clock" size={15} /> Submitted — awaiting grading. You can re-submit to update your answers.</div></AC.Card>
       )}
 
-      <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <form action={preview ? undefined : action} onSubmit={preview ? (e) => e.preventDefault() : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {scenario.flags.length > 0 && (
           <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Flag" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Flags</span></div>}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -484,7 +522,7 @@ function SubmitPanel({ scenario, submission }) {
         {state?.ok && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-success, #22c55e)' }}><Icon name="CircleCheck" size={15} /> {state.ok}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <AC.Button type="submit" variant="primary" loading={saving} leadingIcon={<Icon name="Send" size={14} />}>{submission ? 'Re-submit' : 'Submit deliverables'}</AC.Button>
+          <AC.Button type="submit" variant="primary" disabled={preview} loading={saving} leadingIcon={<Icon name="Send" size={14} />}>{preview ? 'Preview — not submitted' : submission ? 'Re-submit' : 'Submit deliverables'}</AC.Button>
         </div>
       </form>
     </div>

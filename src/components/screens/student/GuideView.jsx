@@ -7,7 +7,7 @@ import { injectGuideCss, renderGuideHtml, splitGuide } from '@/components/guideM
 
 /* Renders a scenario's teaching guide: the authored markdown (images served
    from the guide asset route) with inline, interactive CTF prompts. */
-export function GuideView({ scenarioId, markdown, prompts, solvedIds }) {
+export function GuideView({ scenarioId, markdown, prompts, solvedIds, preview }) {
   injectGuideCss();
   const assetBase = `/api/scenarios/${scenarioId}/guide/`;
   const promptMap = useMemo(() => Object.fromEntries((prompts || []).map((p) => [p.id, p])), [prompts]);
@@ -18,7 +18,7 @@ export function GuideView({ scenarioId, markdown, prompts, solvedIds }) {
       {parts.map((chunk, i) => {
         if (i % 2 === 1) {
           const p = promptMap[chunk];
-          return p ? <GuidePrompt key={`p-${chunk}`} scenarioId={scenarioId} prompt={p} initiallySolved={(solvedIds || []).includes(chunk)} /> : null;
+          return p ? <GuidePrompt key={`p-${chunk}`} scenarioId={scenarioId} prompt={p} initiallySolved={(solvedIds || []).includes(chunk)} preview={preview} /> : null;
         }
         if (!chunk.trim()) return null;
         return <div key={`t-${i}`} className="ath-guide" dangerouslySetInnerHTML={{ __html: renderGuideHtml(chunk, assetBase) }} />;
@@ -27,7 +27,7 @@ export function GuideView({ scenarioId, markdown, prompts, solvedIds }) {
   );
 }
 
-function GuidePrompt({ scenarioId, prompt, initiallySolved }) {
+function GuidePrompt({ scenarioId, prompt, initiallySolved, preview }) {
   const [answer, setAnswer] = useState('');
   const [solved, setSolved] = useState(initiallySolved);
   const [wrong, setWrong] = useState(false);
@@ -37,6 +37,12 @@ function GuidePrompt({ scenarioId, prompt, initiallySolved }) {
   const submit = () => {
     if (!answer.trim() || solved) return;
     setWrong(false); setHint(null);
+    if (preview) {
+      // Ephemeral: check locally against the answer (instructor preview only).
+      const ok = answer.trim().toLowerCase() === String(prompt.answer ?? '').trim().toLowerCase();
+      if (ok) setSolved(true); else { setWrong(true); setHint(prompt.hint || null); }
+      return;
+    }
     start(async () => {
       const res = await checkGuidePrompt(scenarioId, prompt.id, answer);
       if (res.error) { setWrong(true); setHint(res.error); return; }

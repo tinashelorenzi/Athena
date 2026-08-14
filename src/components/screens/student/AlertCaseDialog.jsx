@@ -14,7 +14,7 @@ const IOC_TYPES = ['ip', 'domain', 'url', 'hash', 'email', 'other'];
 
 /* Per-alert case editor: verdict, notes, IoCs, open/closed. Saves to the DB and
    reports the new state back so the alerts table updates without a reload. */
-export function AlertCaseDialog({ alert, caseData, scenarioId, onClose, onSaved, onError }) {
+export function AlertCaseDialog({ alert, caseData, scenarioId, onClose, onSaved, onError, preview }) {
   const [verdict, setVerdict] = useState(caseData?.verdict ?? null);
   const [status, setStatus] = useState(caseData?.status ?? 'OPEN');
   const [notes, setNotes] = useState(caseData?.notes ?? '');
@@ -27,8 +27,9 @@ export function AlertCaseDialog({ alert, caseData, scenarioId, onClose, onSaved,
   const delIoc = (i) => setIocs((l) => l.filter((_, j) => j !== i));
 
   const save = async () => {
-    setBusy(true);
     const payload = { verdict, status, notes, iocs: iocs.filter((i) => i.value.trim()) };
+    if (preview) { onSaved?.(alert.id, { ...payload }); onClose(); return; }
+    setBusy(true);
     const res = await saveAlertCase(scenarioId, alert.id, payload);
     setBusy(false);
     if (res?.error) { onError?.(res.error); return; }

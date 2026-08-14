@@ -61,9 +61,11 @@ export function AdminShell({ children, user }) {
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</div>
               <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Instructor · Admin</div>
             </div>
-            <Tooltip content="Open the lab" placement="top">
-              <IconButton label="Open the lab" onClick={() => router.push('/alerts')}><Icon name="FlaskConical" size={16} /></IconButton>
-            </Tooltip>
+            {isArchitect && (
+              <Tooltip content="Preview scenarios" placement="top">
+                <IconButton label="Preview scenarios" onClick={() => router.push('/admin/scenarios')}><Icon name="FlaskConical" size={16} /></IconButton>
+              </Tooltip>
+            )}
             <IconButton label="Sign out" onClick={() => logout()}><Icon name="LogOut" size={16} /></IconButton>
           </div>
         }
