@@ -21,6 +21,9 @@ function ecsDoc(e) {
 }
 const hhmmss = (ms) => (Number.isNaN(ms) ? '' : new Date(ms).toISOString().slice(11, 19));
 const tsMs = (e) => Date.parse(String(e.ts));
+// Stable identity for a log doc so expanded rows + keys survive live streaming
+// (new events change array indices; content does not).
+const docId = (e) => `${e.ts}|${e.host}|${e.source}|${e.action}|${e.message}`;
 
 export function LogsPanel({ run }) {
   const entries = Array.isArray(run.logs) ? run.logs : [];
@@ -51,13 +54,14 @@ export function LogsPanel({ run }) {
     return { fullMin: min, fullMax: max, buckets: n, bucketMs: size, counts: c, maxCount: Math.max(1, ...c) };
   }, [entries, kqlDocs]);
 
-  // Apply the brushed time window to the query results.
+  // Apply the brushed time window to the query results, then show newest-first
+  // (Discover-style) so streaming events land at the top of the list.
   const docs = useMemo(() => {
-    if (!sel) return kqlDocs;
-    return kqlDocs.filter((e) => { const t = tsMs(e); return t >= sel.start && t < sel.end; });
+    const windowed = sel ? kqlDocs.filter((e) => { const t = tsMs(e); return t >= sel.start && t < sel.end; }) : kqlDocs;
+    return [...windowed].reverse();
   }, [kqlDocs, sel]);
 
-  const toggle = (i) => setExpanded((s) => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  const toggle = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const addField = (f) => setQuery((q) => (q.trim() ? `${q.trim()} and ${f}:` : `${f}:`));
 
   const onUp = () => {
@@ -167,12 +171,13 @@ export function LogsPanel({ run }) {
                 <div style={{ display: 'flex', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border-default)', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
                   <span style={{ width: 26 }} /><span style={{ width: 165 }}>Time</span><span>Document</span>
                 </div>
-                {docs.map((e, i) => {
-                  const open = expanded.has(i);
+                {docs.map((e) => {
+                  const id = docId(e);
+                  const open = expanded.has(id);
                   const doc = ecsDoc(e);
                   return (
-                    <div key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <button onClick={() => toggle(i)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    <div key={id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <button onClick={() => toggle(id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer' }}>
                         <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={13} style={{ color: 'var(--text-tertiary)', flex: 'none', width: 16 }} />
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)', flex: 'none', width: 165 }}>{e.ts}</span>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

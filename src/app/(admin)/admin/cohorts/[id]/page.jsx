@@ -52,8 +52,10 @@ export default async function CohortDetailPage({ params }) {
         return {
           id: s.id, studentName: s.student.name, scenarioTitle: s.scenario.title,
           submitted: s.submittedAt.toISOString().slice(0, 10),
-          status: s.status, grade: s.grade,
+          status: s.status, grade: s.grade, feedback: s.feedback || '',
+          released: s.releasedAt != null,
           report: s.report || '',
+          reportFileName: s.reportFileName || '',
           flagReview: flags.map((f) => ({
             question: f.question,
             answer: answers[f.id] ?? '',

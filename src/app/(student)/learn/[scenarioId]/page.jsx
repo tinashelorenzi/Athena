@@ -52,6 +52,12 @@ export default async function ScenarioWorkspacePage({ params }) {
     : [];
   const solvedIds = guideSolves.map((s) => s.promptId);
 
+  // Dojo flags are self-checked individually; load which the student has solved.
+  const flagSolves = scenario.type === 'DOJO'
+    ? await prisma.flagSolve.findMany({ where: { studentId: user.id, scenarioId }, select: { flagId: true } })
+    : [];
+  const solvedFlagIds = flagSolves.map((s) => s.flagId);
+
   // The student's existing case work, keyed by alert id.
   const caseRows = await prisma.alertCase.findMany({
     where: { studentId: user.id, scenarioId },
@@ -61,13 +67,17 @@ export default async function ScenarioWorkspacePage({ params }) {
     caseRows.map((c) => [c.alertId, { verdict: c.verdict, status: c.status, notes: c.notes || '', iocs: Array.isArray(c.iocs) ? c.iocs : [] }]),
   );
 
+  // The grade/feedback stay hidden until the instructor releases them.
+  const released = submission ? submission.releasedAt != null : false;
   const sub = submission
     ? {
+        id: submission.id,
         report: submission.report || '',
+        reportFileName: submission.reportFileName || '',
         flagAnswers: submission.flagAnswers || {},
-        status: submission.status,
-        grade: submission.grade,
-        feedback: submission.feedback || '',
+        status: released ? 'GRADED' : 'SUBMITTED',
+        grade: released ? submission.grade : null,
+        feedback: released ? (submission.feedback || '') : '',
         submittedAt: submission.submittedAt.toISOString(),
       }
     : null;
@@ -82,5 +92,5 @@ export default async function ScenarioWorkspacePage({ params }) {
     initialRun = { status: run.status, elapsed, alerts, logs, startedAt: run.startedAt.toISOString() };
   }
 
-  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} solvedIds={solvedIds} initialCases={cases} />;
+  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} solvedIds={solvedIds} solvedFlagIds={solvedFlagIds} initialCases={cases} />;
 }

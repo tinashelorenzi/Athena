@@ -14,8 +14,11 @@ import { feedAtClient } from './previewFeed';
 // alasql (used by OSQueryPanel) only bundles for the browser, so load it client-only.
 const OSQueryPanel = dynamic(() => import('./OSQueryPanel').then((m) => m.OSQueryPanel), { ssr: false });
 import { submitScenario } from '@/app/actions/submissions';
+import { checkFlag } from '@/app/actions/flags';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 
+// The Guide and Answers surfaces are always-available FABs (right side), so a
+// student can reference them from any investigation panel.
 const BASE_PANELS = [
   { id: 'brief', label: 'Brief', icon: 'BookOpen' },
   { id: 'alerts', label: 'Alerts', icon: 'Bell' },
@@ -23,12 +26,11 @@ const BASE_PANELS = [
   { id: 'osquery', label: 'OSQuery', icon: 'TerminalSquare' },
   { id: 'endpoints', label: 'EDR', icon: 'MonitorSmartphone' },
   { id: 'artifacts', label: 'Artifacts', icon: 'Paperclip' },
-  { id: 'submit', label: 'Submit', icon: 'Send' },
 ];
 
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 
-export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, initialCases, preview = false }) {
+export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, solvedFlagIds, initialCases, preview = false }) {
   const router = useRouter();
   const PANELS = scenario.hasGuide ? [{ id: 'guide', label: 'Guide', icon: 'GraduationCap' }, ...BASE_PANELS] : BASE_PANELS;
   const [panel, setPanel] = useState(scenario.hasGuide ? 'guide' : 'brief');
@@ -37,6 +39,8 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   const [busy, startTransition] = useTransition();
   const [cases, setCases] = useState(initialCases || {});
   const [caseAlert, setCaseAlert] = useState(null);
+  const [drawer, setDrawer] = useState(null); // 'guide' | 'answers' | null
+  const isDojo = scenario.type === 'DOJO';
 
   // Preview mode: an ephemeral, client-side clock (no server actions, no storage).
   const startRef = useRef(0);
@@ -45,10 +49,15 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   const canPause = scenario.type === 'DOJO' && !scenario.realtime;
 
   const hasRun = run.status !== 'NONE';
-  const [wsOpen, setWsOpen] = useState(false);
+  // Timestamp (ms) of the last `feed` message actually received over the socket.
+  // Feed *liveness* — not merely "socket open" — drives the poll fallback, so a
+  // half-connected socket (opened, but the server returns `error` or stalls and
+  // never pushes) can't silently freeze the feed.
+  const lastFeedRef = useRef(0);
 
-  // Live feed over WebSocket (real-time push). Falls back to polling if the
-  // socket can't connect (e.g. nginx `/ws` upgrade not configured).
+  // Live feed over WebSocket (real-time push). The poll effect below covers any
+  // case where the socket connects but no feed arrives (nginx `/ws` not wired,
+  // non-cohort subscriber, transient server error).
   useEffect(() => {
     if (preview || !hasRun || typeof window === 'undefined') return;
     let socket;
@@ -59,22 +68,28 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         socket = new WebSocket(`${proto}//${window.location.host}/ws`);
       } catch { return; }
-      socket.onopen = () => { setWsOpen(true); socket.send(JSON.stringify({ type: 'subscribe', scenarioId: scenario.id })); };
+      socket.onopen = () => { socket.send(JSON.stringify({ type: 'subscribe', scenarioId: scenario.id })); };
       socket.onmessage = (e) => {
-        try { const d = JSON.parse(e.data); if (d.type === 'feed') setRun((r) => ({ ...r, ...d })); } catch { /* ignore */ }
+        try {
+          const d = JSON.parse(e.data);
+          if (d.type === 'feed') { lastFeedRef.current = Date.now(); setRun((r) => ({ ...r, ...d })); }
+        } catch { /* ignore */ }
       };
-      socket.onclose = () => { setWsOpen(false); if (!closed) retry = setTimeout(connect, 5000); };
+      socket.onclose = () => { if (!closed) retry = setTimeout(connect, 5000); };
       socket.onerror = () => { try { socket.close(); } catch { /* ignore */ } };
     };
     connect();
-    return () => { closed = true; clearTimeout(retry); setWsOpen(false); try { socket && socket.close(); } catch { /* ignore */ } };
-  }, [scenario.id, hasRun]);
+    return () => { closed = true; clearTimeout(retry); try { socket && socket.close(); } catch { /* ignore */ } };
+  }, [scenario.id, hasRun, preview]);
 
-  // Poll fallback while running when the WebSocket isn't connected.
+  // Poll fallback while running. Skips a tick only when the socket delivered a
+  // feed very recently — so if the socket is dead/silent, polling keeps the feed
+  // flowing without waiting on a refresh.
   useEffect(() => {
-    if (preview || run.status !== 'RUNNING' || wsOpen) return;
+    if (preview || run.status !== 'RUNNING') return;
     let active = true;
     const poll = async () => {
+      if (Date.now() - lastFeedRef.current < 3500) return; // socket is feeding; let it
       try {
         const res = await fetch(`/api/runs/${scenario.id}`, { cache: 'no-store' });
         if (!res.ok) return;
@@ -82,9 +97,10 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
         if (active) setRun((r) => ({ ...r, ...data }));
       } catch { /* transient */ }
     };
+    poll();
     const id = setInterval(poll, 2500);
     return () => { active = false; clearInterval(id); };
-  }, [run.status, scenario.id, wsOpen]);
+  }, [run.status, scenario.id, preview]);
 
   // Smooth local clock between polls.
   useEffect(() => {
@@ -194,10 +210,36 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
             {panel === 'osquery' && <OSQueryPanel endpoints={scenario.endpoints} />}
             {panel === 'endpoints' && <EndpointsPanel endpoints={scenario.endpoints} />}
             {panel === 'artifacts' && <ArtifactsPanel endpoints={scenario.endpoints} />}
-            {panel === 'submit' && <SubmitPanel scenario={scenario} submission={submission} preview={preview} />}
           </div>
         </main>
       </div>
+
+      {/* Floating access to the guide + answers from any panel */}
+      <div style={{ position: 'fixed', right: 20, bottom: 20, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 40 }}>
+        {scenario.hasGuide && (
+          <Fab icon="GraduationCap" label="Guide" active={drawer === 'guide'} onClick={() => setDrawer((d) => (d === 'guide' ? null : 'guide'))} />
+        )}
+        <Fab
+          icon={isDojo ? 'FlagTriangleRight' : 'Send'}
+          label={isDojo ? 'Answers' : 'Submit'}
+          badge={isDojo && scenario.flags?.length ? `${(solvedFlagIds || []).length}/${scenario.flags.length}` : null}
+          active={drawer === 'answers'}
+          onClick={() => setDrawer((d) => (d === 'answers' ? null : 'answers'))}
+        />
+      </div>
+
+      {drawer === 'guide' && scenario.hasGuide && (
+        <SlideOver title="Scenario guide" icon="GraduationCap" onClose={() => setDrawer(null)} width={620}>
+          <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} preview={preview} />
+        </SlideOver>
+      )}
+      {drawer === 'answers' && (
+        <SlideOver title={isDojo ? 'Answers' : 'Submit deliverables'} icon={isDojo ? 'FlagTriangleRight' : 'Send'} onClose={() => setDrawer(null)} width={480}>
+          {isDojo
+            ? <FlagChecklist scenario={scenario} scenarioId={scenario.id} solvedFlagIds={solvedFlagIds || []} preview={preview} />
+            : <SubmitForm scenario={scenario} submission={submission} preview={preview} />}
+        </SlideOver>
+      )}
 
       <AlertCaseDialog
         key={caseAlert ? caseAlert.id : 'none'}
@@ -476,12 +518,17 @@ function ArtifactsPanel({ endpoints }) {
   );
 }
 
-function SubmitPanel({ scenario, submission, preview }) {
+function SubmitForm({ scenario, submission, preview }) {
   const [state, action, saving] = useActionState(submitScenario.bind(null, scenario.id), {});
   const answers = submission?.flagAnswers || {};
+  const [file, setFile] = useState(null);          // newly picked File (display only)
+  const [removeFile, setRemoveFile] = useState(false);
+  const fileRef = useRef(null);
+  const existingFile = submission?.reportFileName && !file && !removeFile ? submission.reportFileName : null;
+  const clearFile = () => { if (fileRef.current) fileRef.current.value = ''; setFile(null); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PanelTitle icon="Send" title="Submit deliverables" sub="Answer the flags and (if required) write your report." />
+      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>Answer the flags and (if required) write or upload your report. Your instructor grades and then releases the result.</div>
       {submission?.status === 'GRADED' && (
         <AC.Card accent>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -513,8 +560,36 @@ function SubmitPanel({ scenario, submission, preview }) {
 
         <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="FileText" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Report {scenario.reportRequired ? '(required)' : '(optional)'}</span></div>}>
           {scenario.reportPrompt && <p style={{ fontSize: 12.5, color: 'var(--text-tertiary)', margin: '0 0 10px', lineHeight: 1.5 }}>{scenario.reportPrompt}</p>}
-          <textarea name="report" rows={8} defaultValue={submission?.report || ''} placeholder="Write up your findings, timeline, and recommendations…" spellCheck={false}
+          <textarea name="report" rows={7} defaultValue={submission?.report || ''} placeholder="Write up your findings, timeline, and recommendations…" spellCheck={false}
             style={{ width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.5 }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0 8px' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>or upload a document</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
+          </div>
+
+          {removeFile && !file && <input type="hidden" name="removeReportFile" value="1" />}
+          {/* Always-mounted so the picked File stays in the form submission. */}
+          <input ref={fileRef} type="file" name="reportFile" accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" style={{ display: 'none' }} onChange={(e) => { setFile(e.target.files?.[0] || null); setRemoveFile(false); }} />
+          {file ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
+              <Icon name="FileText" size={16} style={{ color: 'var(--accent, #7c8cff)', flex: 'none' }} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name} · {(file.size / 1024).toFixed(0)} KB</span>
+              <AC.IconButton label="Remove" onClick={clearFile}><Icon name="X" size={15} /></AC.IconButton>
+            </div>
+          ) : existingFile ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
+              <Icon name="FileCheck2" size={16} style={{ color: 'var(--status-success, #22c55e)', flex: 'none' }} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{existingFile} <span style={{ color: 'var(--text-tertiary)' }}>· uploaded</span></span>
+              {submission?.id && <a href={`/api/submissions/${submission.id}/report`} style={{ textDecoration: 'none' }}><AC.Button variant="ghost" size="sm" leadingIcon={<Icon name="Download" size={13} />}>Open</AC.Button></a>}
+              <AC.IconButton label="Remove" onClick={() => setRemoveFile(true)}><Icon name="Trash2" size={15} /></AC.IconButton>
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileRef.current?.click()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px dashed var(--border-default)', cursor: 'pointer', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+              <Icon name="Upload" size={15} /> Choose .pdf, .docx or .doc
+            </button>
+          )}
         </AC.Card>
 
         {state?.error && <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}><Icon name="TriangleAlert" size={15} /> {state.error}</div>}
@@ -524,6 +599,107 @@ function SubmitPanel({ scenario, submission, preview }) {
           <AC.Button type="submit" variant="primary" disabled={preview} loading={saving} leadingIcon={<Icon name="Send" size={14} />}>{preview ? 'Preview — not submitted' : submission ? 'Re-submit' : 'Submit deliverables'}</AC.Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function Fab({ icon, label, active, badge, onClick }) {
+  return (
+    <button onClick={onClick} title={label} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, cursor: 'pointer',
+      background: active ? 'var(--accent, #7c8cff)' : 'var(--surface-raised)',
+      border: '1px solid ' + (active ? 'var(--accent, #7c8cff)' : 'var(--border-default)'),
+      color: active ? '#fff' : 'var(--text-primary)', fontSize: 13, fontWeight: 600,
+      boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
+    }}>
+      <Icon name={icon} size={17} /> {label}
+      {badge && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '1px 6px', borderRadius: 999, background: active ? 'rgba(255,255,255,0.22)' : 'var(--surface-inset)', color: active ? '#fff' : 'var(--text-tertiary)' }}>{badge}</span>}
+    </button>
+  );
+}
+
+function SlideOver({ title, icon, width = 480, onClose, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 45 }} />
+      <div role="dialog" aria-label={title} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: `min(94vw, ${width}px)`, background: 'var(--surface-panel)', borderLeft: '1px solid var(--border-default)', zIndex: 46, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.3)' }}>
+        <div style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <Icon name={icon} size={17} style={{ color: 'var(--text-secondary)' }} />
+          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
+          <AC.IconButton label="Close" onClick={onClose}><Icon name="X" size={18} /></AC.IconButton>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 18 }}>{children}</div>
+      </div>
+    </>
+  );
+}
+
+/* Dojo flags, checked one at a time (instant feedback, persisted) — no batch
+   submission. Assessment flags are graded by an instructor instead. */
+function FlagChecklist({ scenario, scenarioId, solvedFlagIds, preview }) {
+  const flags = scenario.flags || [];
+  const solvedInit = useMemo(() => new Set(solvedFlagIds), [solvedFlagIds]);
+  if (flags.length === 0) return <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No flags to answer in this scenario.</div>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>Check each answer as you find it — instant feedback, no submission needed.</div>
+      {flags.map((f, i) => (
+        <FlagItem key={f.id} scenarioId={scenarioId} flag={f} index={i} initiallySolved={solvedInit.has(f.id)} preview={preview} />
+      ))}
+    </div>
+  );
+}
+
+function FlagItem({ scenarioId, flag, index, initiallySolved, preview }) {
+  const [answer, setAnswer] = useState('');
+  const [solved, setSolved] = useState(initiallySolved);
+  const [wrong, setWrong] = useState(false);
+  const [busy, start] = useTransition();
+
+  const submit = () => {
+    if (!answer.trim() || solved) return;
+    setWrong(false);
+    if (preview) {
+      const ok = answer.trim().toLowerCase() === String(flag.answer ?? '').trim().toLowerCase();
+      if (ok) setSolved(true); else setWrong(true);
+      return;
+    }
+    start(async () => {
+      const res = await checkFlag(scenarioId, flag.id, answer);
+      if (res.correct) setSolved(true); else setWrong(true);
+    });
+  };
+
+  return (
+    <div style={{
+      borderRadius: 'var(--radius-sm)', padding: '13px 14px',
+      border: '1px solid ' + (solved ? 'var(--status-success, #22c55e)' : 'var(--border-default)'),
+      background: solved ? 'var(--success-subtle-bg, rgba(34,197,94,0.08))' : 'var(--surface-inset)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <Icon name={solved ? 'CircleCheck' : 'FlagTriangleRight'} size={15} style={{ color: solved ? 'var(--status-success, #22c55e)' : 'var(--accent, #7c8cff)' }} />
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Flag {index + 1}{flag.points ? ` · ${flag.points} pts` : ''}</span>
+        {solved && <AC.Badge tone="success" square>Solved</AC.Badge>}
+      </div>
+      <div style={{ fontSize: 13.5, color: 'var(--text-primary)', marginBottom: 10, lineHeight: 1.5 }}>{flag.question}</div>
+      {solved ? (
+        <div style={{ fontSize: 12.5, color: 'var(--status-success, #22c55e)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="Check" size={14} /> Correct.</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <AC.Input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} placeholder="Your answer" mono leadingIcon={<Icon name="Flag" size={15} />} />
+            </div>
+            <AC.Button variant="primary" size="md" loading={busy} onClick={submit}>Check</AC.Button>
+          </div>
+          {wrong && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--status-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="X" size={14} /> Not quite — keep investigating.</div>}
+        </>
+      )}
     </div>
   );
 }

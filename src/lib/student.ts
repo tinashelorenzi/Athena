@@ -30,7 +30,7 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
 
   const [progress, submissions, runs] = await Promise.all([
     prisma.scenarioProgress.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true } }),
-    prisma.submission.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true, grade: true } }),
+    prisma.submission.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true, grade: true, releasedAt: true } }),
     prisma.scenarioRun.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true } }),
   ]);
   const started = new Set(progress.map((p) => p.scenarioId));
@@ -40,8 +40,10 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   return bindings.map((b) => {
     const sub = subMap.get(b.scenario.id);
     const runStatus = runMap.get(b.scenario.id);
+    // A grade stays hidden (shows as "Submitted") until the instructor releases it.
+    const released = Boolean(sub && sub.status === "GRADED" && sub.releasedAt != null);
     let status: StudentScenarioStatus;
-    if (sub) status = sub.status === "GRADED" ? "GRADED" : "SUBMITTED";
+    if (sub) status = released ? "GRADED" : "SUBMITTED";
     else if (runStatus === "COMPLETED") status = "COMPLETED";
     else if (runStatus || started.has(b.scenario.id)) status = "IN_PROGRESS";
     else status = "NOT_STARTED";
@@ -51,7 +53,7 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
       type: b.scenario.type as "DOJO" | "ASSESSMENT",
       description: b.scenario.description,
       status,
-      grade: sub?.grade ?? null,
+      grade: released ? sub?.grade ?? null : null,
     };
   });
 }

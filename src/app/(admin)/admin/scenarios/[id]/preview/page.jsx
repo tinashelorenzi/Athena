@@ -24,7 +24,11 @@ export default async function ScenarioPreviewPage({ params }) {
     description: scenario.description,
     brief: scenario.brief,
     objectives: scenario.objectives || [],
-    flags: publicFlags(scenario.flags),
+    // Preview includes the answers so Dojo flags can be checked locally.
+    flags: publicFlags(scenario.flags).map((f) => {
+      const raw = (Array.isArray(scenario.flags) ? scenario.flags : []).find((x, i) => String(x?.id ?? `f${i + 1}`) === f.id);
+      return { ...f, answer: raw?.answer ?? '' };
+    }),
     reportRequired: scenario.reportRequired,
     reportPrompt: scenario.reportPrompt || '',
     endpoints: scenario.endpoints.map((e) => ({
@@ -51,6 +55,7 @@ export default async function ScenarioPreviewPage({ params }) {
       submission={null}
       initialRun={initialRun}
       solvedIds={[]}
+      solvedFlagIds={[]}
       initialCases={{}}
     />
   );

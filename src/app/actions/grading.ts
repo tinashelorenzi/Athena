@@ -6,17 +6,22 @@ import { requireRole } from "@/lib/auth";
 
 export type GradeResult = { error?: string; ok?: boolean };
 
-/** Grade a student's scenario submission (instructor-only). */
+/**
+ * Commit a grade for a student's submission (instructor-only). The grade is
+ * *held* — it stays hidden from the student until it's released with
+ * `releaseGrade`. Re-grading a released submission preserves its released state.
+ */
 export async function gradeSubmission(
   submissionId: string,
   grade: number,
   feedback: string,
+  release = false,
 ): Promise<GradeResult> {
   const admin = await requireRole("SUPER_ADMIN");
 
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, student: { select: { cohortId: true } } },
+    select: { id: true, releasedAt: true, student: { select: { cohortId: true } } },
   });
   if (!submission) return { error: "Submission not found." };
 
@@ -33,7 +38,34 @@ export async function gradeSubmission(
       status: "GRADED",
       gradedById: admin.id,
       gradedAt: new Date(),
+      // Release now if asked; otherwise keep whatever release state it had.
+      ...(release ? { releasedAt: new Date() } : {}),
     },
+  });
+
+  if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);
+  return { ok: true };
+}
+
+/** Release (or re-hide) a committed grade so the student can see it. */
+export async function setGradeReleased(
+  submissionId: string,
+  released: boolean,
+): Promise<GradeResult> {
+  await requireRole("SUPER_ADMIN");
+
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, status: true, grade: true, student: { select: { cohortId: true } } },
+  });
+  if (!submission) return { error: "Submission not found." };
+  if (released && (submission.status !== "GRADED" || submission.grade == null)) {
+    return { error: "Commit a grade before releasing it." };
+  }
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: { releasedAt: released ? new Date() : null },
   });
 
   if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);

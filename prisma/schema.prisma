@@ -40,6 +40,7 @@ model User {
   progress     ScenarioProgress[]
   runs         ScenarioRun[]
   guideSolves  GuidePromptSolve[]
+  flagSolves   FlagSolve[]
   alertCases   AlertCase[]
 
   @@index([cohortId])
@@ -103,12 +104,20 @@ model Submission {
   studentId   String
   student     User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
   report      String?          @db.Text
+  /// An uploaded report (docx/pdf) as an alternative to the typed `report`.
+  reportFileKey  String?
+  reportFileName String?
+  reportFileType String?
+  reportFileSize Int?
   flagAnswers Json? // { flagId: answer }
   status      SubmissionStatus @default(SUBMITTED)
   grade       Int?
   feedback    String?          @db.Text
   gradedById  String?
   gradedAt    DateTime?
+  /// Set when the instructor releases the committed grade to the student. The
+  /// grade/feedback stay hidden from the student until this is non-null.
+  releasedAt  DateTime?
   submittedAt DateTime         @default(now())
 
   @@unique([scenarioId, studentId])
@@ -198,6 +207,7 @@ model Scenario {
   progress       ScenarioProgress[]
   runs           ScenarioRun[]
   guideSolves    GuidePromptSolve[]
+  flagSolves     FlagSolve[]
   alertCases     AlertCase[]
 
   @@index([type])
@@ -250,6 +260,22 @@ model GuidePromptSolve {
   @@unique([scenarioId, studentId, promptId])
   @@index([studentId])
   @@map("guide_prompt_solves")
+}
+
+/// A student's correct answer to a Dojo scenario flag, checked individually (not
+/// at submission). Assessment flags are graded by an instructor instead.
+model FlagSolve {
+  id         String   @id @default(cuid())
+  scenarioId String
+  scenario   Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  flagId     String
+  solvedAt   DateTime @default(now())
+
+  @@unique([scenarioId, studentId, flagId])
+  @@index([studentId])
+  @@map("flag_solves")
 }
 
 /// A student's live run of a scenario. Holds a server-authoritative clock so the

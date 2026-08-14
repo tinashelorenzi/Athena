@@ -33,7 +33,8 @@ export type Standing = {
 
 export async function getStudentStanding(userId: string): Promise<Standing> {
   const subs = await prisma.submission.findMany({
-    where: { studentId: userId, status: "GRADED", scenario: { type: "ASSESSMENT" } },
+    // Only released grades count — a held grade isn't the student's result yet.
+    where: { studentId: userId, status: "GRADED", releasedAt: { not: null }, scenario: { type: "ASSESSMENT" } },
     select: { grade: true },
   });
   const reputation = subs.reduce((sum, s) => sum + (s.grade ?? 0), 0);
@@ -54,6 +55,7 @@ export async function getCohortLeaderboard(cohortId: string): Promise<Leaderboar
     where: {
       studentId: { in: students.map((s) => s.id) },
       status: "GRADED",
+      releasedAt: { not: null },
       scenario: { type: "ASSESSMENT" },
     },
     select: { studentId: true, grade: true },
