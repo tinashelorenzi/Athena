@@ -1,13 +1,18 @@
 'use client';
 import React, { useState, useMemo, useEffect, useRef, useActionState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { Markdown } from '@/components/Markdown';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
 import { AlertCaseDialog } from './AlertCaseDialog';
+import { LogsPanel } from './LogsPanel';
 import { feedAtClient } from './previewFeed';
+
+// alasql (used by OSQueryPanel) only bundles for the browser, so load it client-only.
+const OSQueryPanel = dynamic(() => import('./OSQueryPanel').then((m) => m.OSQueryPanel), { ssr: false });
 import { submitScenario } from '@/app/actions/submissions';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 
@@ -15,7 +20,8 @@ const BASE_PANELS = [
   { id: 'brief', label: 'Brief', icon: 'BookOpen' },
   { id: 'alerts', label: 'Alerts', icon: 'Bell' },
   { id: 'logs', label: 'Logs', icon: 'ScrollText' },
-  { id: 'endpoints', label: 'Endpoints', icon: 'MonitorSmartphone' },
+  { id: 'osquery', label: 'OSQuery', icon: 'TerminalSquare' },
+  { id: 'endpoints', label: 'EDR', icon: 'MonitorSmartphone' },
   { id: 'artifacts', label: 'Artifacts', icon: 'Paperclip' },
   { id: 'submit', label: 'Submit', icon: 'Send' },
 ];
@@ -184,7 +190,8 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
             )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
             {panel === 'alerts' && <FeedPanel kind="alerts" run={run} cases={cases} onOpenCase={setCaseAlert} />}
-            {panel === 'logs' && <FeedPanel kind="logs" run={run} />}
+            {panel === 'logs' && <LogsPanel run={run} />}
+            {panel === 'osquery' && <OSQueryPanel endpoints={scenario.endpoints} />}
             {panel === 'endpoints' && <EndpointsPanel endpoints={scenario.endpoints} />}
             {panel === 'artifacts' && <ArtifactsPanel endpoints={scenario.endpoints} />}
             {panel === 'submit' && <SubmitPanel scenario={scenario} submission={submission} preview={preview} />}
@@ -414,7 +421,7 @@ function EndpointsPanel({ endpoints }) {
 
   return (
     <div>
-      <PanelTitle icon="MonitorSmartphone" title="Endpoints" sub="EDR telemetry and OSQuery snapshots" />
+      <PanelTitle icon="MonitorSmartphone" title="EDR" sub="Endpoint detection & response telemetry" />
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
         {endpoints.map((e) => (
           <button key={e.id} onClick={() => setHost(e.id)} style={{
@@ -434,15 +441,7 @@ function EndpointsPanel({ endpoints }) {
             {Array.isArray(ep.edr.browserHistory) && ep.edr.browserHistory.length > 0 && <Section title="Browser history"><DataTable rows={ep.edr.browserHistory} /></Section>}
             {Array.isArray(ep.edr.shellHistory) && ep.edr.shellHistory.length > 0 && <Section title="Shell history"><DataTable rows={ep.edr.shellHistory} /></Section>}
           </>
-        ) : <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No EDR data for this host.</span>}
-      </AC.Card>
-
-      <div style={{ height: 14 }} />
-
-      <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="TerminalSquare" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>OSQuery · {ep.hostname}</span></div>}>
-        {ep.osquery?.tables && Object.keys(ep.osquery.tables).length > 0 ? (
-          Object.entries(ep.osquery.tables).map(([name, rows]) => <Section key={name} title={name}><DataTable rows={rows} /></Section>)
-        ) : <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No OSQuery data for this host.</span>}
+        ) : <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No EDR data for this host. Try the OSQuery tab.</span>}
       </AC.Card>
     </div>
   );
