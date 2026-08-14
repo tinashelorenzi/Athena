@@ -73,6 +73,7 @@ is optional.
 | `description` | string              |                                                              |
 | `exposure`    | `ROLLOUT`/`PUBLIC`  | Defaults to `ROLLOUT` (hidden from students until bound).    |
 | `hidden`      | boolean             | Dojo-only; reachable by reference link but unlisted.        |
+| `realtime`    | boolean             | Real-time simulation — feed runs continuously, students can't pause. |
 | `brief`       | string              | Path to a `.md` file, **or** inline markdown text.          |
 | `objectives`  | string[]            | Guidance shown to students.                                 |
 | `flags`       | object[]            | `{ question, answer, points }` — graded deliverable flags.  |

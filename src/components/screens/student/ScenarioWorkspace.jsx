@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon';
 import { Markdown } from '@/components/Markdown';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
+import { AlertCaseDialog } from './AlertCaseDialog';
 import { submitScenario } from '@/app/actions/submissions';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 
@@ -20,19 +21,47 @@ const BASE_PANELS = [
 
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 
-export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds }) {
+export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, initialCases }) {
   const router = useRouter();
   const PANELS = scenario.hasGuide ? [{ id: 'guide', label: 'Guide', icon: 'GraduationCap' }, ...BASE_PANELS] : BASE_PANELS;
   const [panel, setPanel] = useState(scenario.hasGuide ? 'guide' : 'brief');
   const [run, setRun] = useState(initialRun);
   const [err, setErr] = useState(null);
   const [busy, startTransition] = useTransition();
+  const [cases, setCases] = useState(initialCases || {});
+  const [caseAlert, setCaseAlert] = useState(null);
 
-  const canPause = scenario.type === 'DOJO';
+  const canPause = scenario.type === 'DOJO' && !scenario.realtime;
 
-  // Poll the feed while running (server is authoritative for elapsed + fired events).
+  const hasRun = run.status !== 'NONE';
+  const [wsOpen, setWsOpen] = useState(false);
+
+  // Live feed over WebSocket (real-time push). Falls back to polling if the
+  // socket can't connect (e.g. nginx `/ws` upgrade not configured).
   useEffect(() => {
-    if (run.status !== 'RUNNING') return;
+    if (!hasRun || typeof window === 'undefined') return;
+    let socket;
+    let closed = false;
+    let retry;
+    const connect = () => {
+      try {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        socket = new WebSocket(`${proto}//${window.location.host}/ws`);
+      } catch { return; }
+      socket.onopen = () => { setWsOpen(true); socket.send(JSON.stringify({ type: 'subscribe', scenarioId: scenario.id })); };
+      socket.onmessage = (e) => {
+        try { const d = JSON.parse(e.data); if (d.type === 'feed') setRun((r) => ({ ...r, ...d })); } catch { /* ignore */ }
+      };
+      socket.onclose = () => { setWsOpen(false); if (!closed) retry = setTimeout(connect, 5000); };
+      socket.onerror = () => { try { socket.close(); } catch { /* ignore */ } };
+    };
+    connect();
+    return () => { closed = true; clearTimeout(retry); setWsOpen(false); try { socket && socket.close(); } catch { /* ignore */ } };
+  }, [scenario.id, hasRun]);
+
+  // Poll fallback while running when the WebSocket isn't connected.
+  useEffect(() => {
+    if (run.status !== 'RUNNING' || wsOpen) return;
     let active = true;
     const poll = async () => {
       try {
@@ -44,7 +73,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
     };
     const id = setInterval(poll, 2500);
     return () => { active = false; clearInterval(id); };
-  }, [run.status, scenario.id]);
+  }, [run.status, scenario.id, wsOpen]);
 
   // Smooth local clock between polls.
   useEffect(() => {
@@ -80,8 +109,13 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
       {/* run control bar */}
       <div style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
-        <RunControls run={run} canPause={canPause} busy={busy} onRun={() => act(startRun)} onPause={() => act(pauseRun)} onResume={() => act(resumeRun)} onComplete={() => act(completeRun)} />
+        <RunControls run={run} canPause={canPause} realtime={scenario.realtime} busy={busy} onRun={() => act(startRun)} onPause={() => act(pauseRun)} onResume={() => act(resumeRun)} onComplete={() => act(completeRun)} />
         <div style={{ flex: 1 }} />
+        {scenario.realtime && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--status-danger, #ef4444)' }}>
+            <Icon name="Radio" size={14} /> Real-time — runs continuously, no pausing
+          </span>
+        )}
         {err && <span style={{ fontSize: 12.5, color: 'var(--status-danger, #ef4444)' }}>{err}</span>}
       </div>
 
@@ -112,7 +146,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
               </div>
             )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
-            {panel === 'alerts' && <FeedPanel kind="alerts" run={run} />}
+            {panel === 'alerts' && <FeedPanel kind="alerts" run={run} cases={cases} onOpenCase={setCaseAlert} />}
             {panel === 'logs' && <FeedPanel kind="logs" run={run} />}
             {panel === 'endpoints' && <EndpointsPanel endpoints={scenario.endpoints} />}
             {panel === 'artifacts' && <ArtifactsPanel endpoints={scenario.endpoints} />}
@@ -120,12 +154,23 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
           </div>
         </main>
       </div>
+
+      <AlertCaseDialog
+        key={caseAlert ? caseAlert.id : 'none'}
+        alert={caseAlert}
+        caseData={caseAlert ? cases[caseAlert.id] : null}
+        scenarioId={scenario.id}
+        onClose={() => setCaseAlert(null)}
+        onError={setErr}
+        onSaved={(alertId, data) => setCases((c) => ({ ...c, [alertId]: data }))}
+      />
     </div>
   );
 }
 
-function RunControls({ run, canPause, busy, onRun, onPause, onResume, onComplete }) {
+function RunControls({ run, canPause, realtime, busy, onRun, onPause, onResume, onComplete }) {
   const status = run.status;
+  const noPauseNote = realtime ? 'Real-time · no pausing' : 'Assessment · runs to the end';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       {status === 'NONE' && <AC.Button variant="primary" size="sm" loading={busy} leadingIcon={<Icon name="Play" size={14} />} onClick={onRun}>Run scenario</AC.Button>}
@@ -134,7 +179,7 @@ function RunControls({ run, canPause, busy, onRun, onPause, onResume, onComplete
           <AC.Badge tone="success" dot square>Running</AC.Badge>
           {canPause
             ? <AC.Button variant="secondary" size="sm" loading={busy} leadingIcon={<Icon name="Pause" size={14} />} onClick={onPause}>Pause</AC.Button>
-            : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Assessment · runs to the end</span>}
+            : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{noPauseNote}</span>}
           <AC.Button variant="ghost" size="sm" loading={busy} leadingIcon={<Icon name="Flag" size={14} />} onClick={onComplete}>Finish</AC.Button>
         </>
       )}
@@ -198,7 +243,14 @@ function BriefPanel({ scenario }) {
   );
 }
 
-function FeedPanel({ kind, run }) {
+const VERDICT_META = {
+  TRUE_POSITIVE: { label: 'TP', tone: 'danger' },
+  FALSE_POSITIVE: { label: 'FP', tone: 'neutral' },
+  BENIGN: { label: 'Benign', tone: 'success' },
+  ESCALATED: { label: 'Esc', tone: 'warning' },
+};
+
+function FeedPanel({ kind, run, cases, onOpenCase }) {
   const isAlerts = kind === 'alerts';
   const items = (isAlerts ? run.alerts : run.logs) || [];
   const [q, setQ] = useState('');
@@ -235,6 +287,20 @@ function FeedPanel({ kind, run }) {
               { key: 'source', header: 'Source → Dest', mono: true, render: (_v, r) => `${r.source || '—'} → ${r.destination || '—'}` },
               { key: 'rule', header: 'Rule', mono: true, width: '120px', render: (v) => v || '—' },
               { key: 'count', header: 'Events', align: 'right', mono: true, width: '80px', render: (v) => v ?? '—' },
+              {
+                key: 'id', header: 'Case', width: '150px', align: 'right',
+                render: (_v, row) => {
+                  const c = cases?.[row.id];
+                  const vm = c?.verdict ? VERDICT_META[c.verdict] : null;
+                  return (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      {vm && <AC.Badge tone={vm.tone} square>{vm.label}</AC.Badge>}
+                      {c?.status === 'CLOSED' && <Icon name="CircleCheck" size={13} style={{ color: 'var(--status-success, #22c55e)' }} />}
+                      <AC.Button variant={c ? 'ghost' : 'secondary'} size="sm" leadingIcon={<Icon name="Gavel" size={13} />} onClick={() => onOpenCase?.(row)}>{c ? 'Edit' : 'Triage'}</AC.Button>
+                    </div>
+                  );
+                },
+              },
             ]}
             rows={items.map((a, i) => ({ ...a, id: a.id ?? `a${i}` }))}
           />

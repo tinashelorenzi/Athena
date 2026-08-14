@@ -40,6 +40,7 @@ model User {
   progress     ScenarioProgress[]
   runs         ScenarioRun[]
   guideSolves  GuidePromptSolve[]
+  alertCases   AlertCase[]
 
   @@index([cohortId])
   @@map("users")
@@ -171,6 +172,9 @@ model Scenario {
   /// Dojo-only: when true the scenario is reachable by direct link but hidden
   /// from student listings.
   hidden         Boolean            @default(false)
+  /// Real-time simulation: the feed runs continuously and CANNOT be paused (like
+  /// a live SOC shift). When false, a Dojo may be paused/resumed.
+  realtime       Boolean            @default(false)
   brief          String             @default("") @db.Text // markdown
   objectives     Json? // [{ id, text }]
   flags          Json? // [{ id, question, answer, points }] — answers are server-only
@@ -194,9 +198,43 @@ model Scenario {
   progress       ScenarioProgress[]
   runs           ScenarioRun[]
   guideSolves    GuidePromptSolve[]
+  alertCases     AlertCase[]
 
   @@index([type])
   @@map("scenarios")
+}
+
+/// A student's case work on a single alert (CTF-style triage): a verdict, notes,
+/// extracted IoCs, and an open/closed status. Persists across sessions.
+model AlertCase {
+  id         String        @id @default(cuid())
+  scenarioId String
+  scenario   Scenario      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  alertId    String // the alert's id within the scenario's alerts bundle
+  verdict    AlertVerdict?
+  status     CaseStatus    @default(OPEN)
+  notes      String?       @db.Text
+  iocs       Json? // [{ type, value }]
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([scenarioId, studentId, alertId])
+  @@index([studentId])
+  @@map("alert_cases")
+}
+
+enum AlertVerdict {
+  TRUE_POSITIVE
+  FALSE_POSITIVE
+  BENIGN
+  ESCALATED
+}
+
+enum CaseStatus {
+  OPEN
+  CLOSED
 }
 
 /// A student's solved guide prompt (CTF-style progress within a scenario guide).
@@ -228,42 +266,18 @@ model ScenarioRun {
   startedAt          DateTime   @default(now())
   runningSince       DateTime?
   accumulatedSeconds Int        @default(0)
-  feedCursor         Int        @default(0) // seconds up to which events are materialized
   lastTickAt         DateTime?
   updatedAt          DateTime   @updatedAt
-  events             RunEvent[]
 
   @@unique([scenarioId, studentId])
   @@index([status])
   @@map("scenario_runs")
 }
 
-/// A materialized feed event (an alert or log line that has "fired") — the
-/// stored state produced by the soc-master workers / load-time catch-up.
-model RunEvent {
-  id        String       @id @default(cuid())
-  runId     String
-  run       ScenarioRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
-  kind      RunEventKind
-  refId     String
-  atSeconds Int
-  firedAt   DateTime     @default(now())
-  payload   Json
-
-  @@unique([runId, kind, refId])
-  @@index([runId])
-  @@map("run_events")
-}
-
 enum RunStatus {
   RUNNING
   PAUSED
   COMPLETED
-}
-
-enum RunEventKind {
-  ALERT
-  LOG
 }
 
 /// Tracks when a student first opened a scenario — used to time alert `seek`

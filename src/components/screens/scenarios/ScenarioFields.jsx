@@ -14,6 +14,7 @@ export { Field, Textarea } from './primitives';
 export function ScenarioFields({ mode = 'create', initial = {} }) {
   const [type, setType] = useState(initial.type || 'DOJO');
   const [hidden, setHidden] = useState(Boolean(initial.hidden));
+  const [realtime, setRealtime] = useState(Boolean(initial.realtime));
   const [reportRequired, setReportRequired] = useState(Boolean(initial.reportRequired));
   const [objectives, setObjectives] = useState(
     (initial.objectives || []).map((o) => ({ text: o.text })),
@@ -54,7 +55,15 @@ export function ScenarioFields({ mode = 'create', initial = {} }) {
               <AC.Switch checked={hidden} onChange={() => setHidden((v) => !v)} />
             </div>
           )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 0' }}>
+            <div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>Real-time simulation</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Feed runs continuously and can't be paused (like a live SOC shift). Off = students can pause &amp; resume.</div>
+            </div>
+            <AC.Switch checked={realtime} onChange={() => setRealtime((v) => !v)} />
+          </div>
           <input type="hidden" name="hidden" value={type === 'DOJO' && hidden ? 'on' : ''} />
+          <input type="hidden" name="realtime" value={realtime ? 'on' : ''} />
         </div>
       </AC.Card>
 

@@ -23,6 +23,7 @@ export default async function ScenarioWorkspacePage({ params }) {
     id: scenario.id,
     title: scenario.title,
     type: scenario.type,
+    realtime: scenario.realtime,
     description: scenario.description,
     brief: scenario.brief,
     objectives: scenario.objectives || [],
@@ -51,6 +52,15 @@ export default async function ScenarioWorkspacePage({ params }) {
     : [];
   const solvedIds = guideSolves.map((s) => s.promptId);
 
+  // The student's existing case work, keyed by alert id.
+  const caseRows = await prisma.alertCase.findMany({
+    where: { studentId: user.id, scenarioId },
+    select: { alertId: true, verdict: true, status: true, notes: true, iocs: true },
+  });
+  const cases = Object.fromEntries(
+    caseRows.map((c) => [c.alertId, { verdict: c.verdict, status: c.status, notes: c.notes || '', iocs: Array.isArray(c.iocs) ? c.iocs : [] }]),
+  );
+
   const sub = submission
     ? {
         report: submission.report || '',
@@ -72,5 +82,5 @@ export default async function ScenarioWorkspacePage({ params }) {
     initialRun = { status: run.status, elapsed, alerts, logs, startedAt: run.startedAt.toISOString() };
   }
 
-  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} solvedIds={solvedIds} />;
+  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} solvedIds={solvedIds} initialCases={cases} />;
 }

@@ -1,53 +1,57 @@
-# Scenario feed workers (soc-master)
+# Realtime feed service (soc-realtime)
 
-The **soc-master** workers drive the live scenario data feed. When a student
-hits **Run**, a `ScenarioRun` is created with a server-authoritative clock. The
-workers continuously advance the feed for every running scenario, materializing
-the alerts and log lines that have "fired" (by their timing) into `RunEvent`
-rows. The student workspace polls `/api/runs/[scenarioId]` to render the feed.
+The **soc-realtime** service streams a running scenario's feed to students over
+**WebSockets**. When a student hits **Run**, the client opens a socket, subscribes
+to the scenario, and receives the fired alerts/logs **pushed live** — computed
+from the run clock, with **no per-student storage** (the old `RunEvent` copies
+are gone). Pause/resume/finish go through the normal HTTP actions (they update
+`ScenarioRun`); the service reflects them on the next tick.
 
-## Two workers
-
-Two instances run under PM2 — **soc-master1** and **soc-master2** — and split
-the running scenarios between them by hashing the run id (`SOC_WORKER_INDEX` /
-`SOC_WORKER_COUNT`). Adding capacity is a matter of running more instances and
-raising the count.
+If the socket can't connect (e.g. nginx `/ws` isn't set up yet), the client
+**falls back to HTTP polling**, so the feed still works — just not sub-second.
 
 ## Running
 
-```bash
-pm2 start ecosystem.config.js     # start both workers
-pm2 status                        # see soc-master1 / soc-master2
-pm2 logs soc-master1              # tail a worker
-pm2 delete ecosystem.config.js    # stop them
-```
-
-Each worker loads `.env` itself (for `DATABASE_URL`) and runs the TypeScript
-worker via `node --import tsx`. For a quick single-worker run without PM2:
+Under PM2 (with the web app):
 
 ```bash
-npm run soc:worker                # runs one worker (shard 1/1)
+npm run build
+pm2 start ecosystem.config.js      # athena-web (:3000) + soc-realtime (:3002)
+pm2 logs soc-realtime
 ```
+
+Standalone (dev): `npm run soc:realtime`. In docker: it's the `realtime` service
+under `docker compose --profile app` (publishes `:3002`).
+
+Upgrading from the old feed workers: `pm2 delete soc-master1 soc-master2`.
+
+## nginx
+
+Proxy the `/ws` path to the service with the WebSocket upgrade headers:
+
+```nginx
+location /ws {
+    proxy_pass http://127.0.0.1:3002;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 3600s;   # keep long-lived sockets open
+}
+```
+
+The client connects to `ws(s)://<same-host>/ws`, so this must be the same origin
+as the app. Auth rides on the existing `athena_session` cookie (the service
+validates it against the DB on connect).
 
 ## Feed timing
 
-- **Alerts** fire at their `seek` (seconds from run start — see
-  `docs/alerts-schema.md`).
-- **Logs** fire at their timestamp offset from the earliest log line, so the log
-  stream plays out over time too.
-
-## Robustness
-
-The poll API runs the same materialization as a **catch-up** on every request,
-so the feed stays correct even if the workers are briefly down or behind — the
-workers keep state fresh between polls and while no one is watching. The clock
-itself is derived from the run row (`accumulatedSeconds` + current running
-segment), so **pause/resume** (dojos only) and reloads never lose progress.
+- **Alerts** fire at their `seek` (seconds from run start).
+- **Logs** fire at their timestamp offset from the earliest log line.
 
 ## Env vars
 
-| Var                | Default | Meaning                                  |
-| ------------------ | ------- | ---------------------------------------- |
-| `SOC_WORKER_INDEX` | `0`     | 0-based shard index for this instance    |
-| `SOC_WORKER_COUNT` | `1`     | total number of workers                  |
-| `SOC_TICK_MS`      | `3000`  | how often each worker advances the feed  |
+| Var                   | Default | Meaning                          |
+| --------------------- | ------- | -------------------------------- |
+| `SOC_REALTIME_PORT`   | `3002`  | WebSocket server port            |
+| `SOC_REALTIME_TICK_MS`| `1000`  | how often the feed is pushed     |

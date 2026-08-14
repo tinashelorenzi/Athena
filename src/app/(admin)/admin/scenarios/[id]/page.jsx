@@ -25,6 +25,7 @@ export default async function ScenarioDetailPage({ params }) {
     description: scenario.description,
     exposure: scenario.exposure,
     hidden: scenario.hidden,
+    realtime: scenario.realtime,
     brief: scenario.brief,
     objectives: scenario.objectives || [],
     flags: scenario.flags || [],

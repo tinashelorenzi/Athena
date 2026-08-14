@@ -77,6 +77,7 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
   const description = String(m.description ?? "").trim();
   const exposure = m.exposure === "PUBLIC" ? "PUBLIC" : "ROLLOUT";
   const hidden = type === "DOJO" && Boolean(m.hidden);
+  const realtime = Boolean(m.realtime);
   const reportRequired = Boolean((m.report as { required?: boolean })?.required);
   const reportPrompt = String((m.report as { prompt?: string })?.prompt ?? "").trim() || null;
 
@@ -174,6 +175,7 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
       description,
       exposure,
       hidden,
+      realtime,
       brief,
       objectives: objectives.length ? objectives : undefined,
       flags: flags.length ? flags : undefined,

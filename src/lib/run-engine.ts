@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/db";
 
 /**
- * Scenario run engine (server-only). The clock is derived from the run row so
- * it survives reloads and supports pause/resume; the feed (alerts/logs) is
- * materialized into RunEvent rows by the soc-master workers and by a load-time
- * catch-up, so the two share this logic.
+ * Scenario run engine (server-only). The clock is derived from the run row so it
+ * survives reloads and supports pause/resume. The feed (alerts/logs) is NOT
+ * stored per student — it's a pure function of elapsed time over the scenario's
+ * own data, so `computeFeed` returns whatever has "fired" so far with no writes.
+ * DB writes only happen on start/pause/resume/finish (the ScenarioRun clock).
  */
 type RunClock = {
   status: "RUNNING" | "PAUSED" | "COMPLETED";
@@ -23,7 +24,7 @@ export function computeElapsed(run: RunClock): number {
 
 type FeedData = { alerts: unknown; logs: unknown };
 
-/** Compute the "fire at" second for each log line, relative to the earliest log. */
+/** The "fire at" second for each log line, relative to the earliest log. */
 function logOffsets(logs: Array<{ ts?: string }>): number[] {
   const times = logs.map((l) => Date.parse(String(l?.ts ?? "")));
   const valid = times.filter((n) => !Number.isNaN(n));
@@ -32,55 +33,30 @@ function logOffsets(logs: Array<{ ts?: string }>): number[] {
 }
 
 /**
- * Materialize any alert/log events that have fired in (feedCursor, elapsed].
- * Idempotent (unique on runId+kind+refId). Returns the number newly fired.
+ * Pure: the alerts/logs that have fired at `elapsed` seconds, each tagged with
+ * the second it fired at (`at`). No DB access, no per-student copies.
  */
-export async function materializeRun(
-  run: { id: string; feedCursor: number },
-  feed: FeedData,
-  elapsed: number,
-): Promise<number> {
-  // feedCursor = next unmaterialized second. Fire events in [feedCursor, elapsed]
-  // (inclusive), so seek-0 events fire at start.
-  if (elapsed < run.feedCursor) {
-    await prisma.scenarioRun.update({ where: { id: run.id }, data: { lastTickAt: new Date() } });
-    return 0;
-  }
-
-  const events: { kind: "ALERT" | "LOG"; refId: string; atSeconds: number; payload: unknown }[] = [];
-
-  const alerts = Array.isArray((feed.alerts as { alerts?: unknown[] })?.alerts)
+export function feedAt(feed: FeedData, elapsed: number): { alerts: unknown[]; logs: unknown[] } {
+  const rawAlerts = Array.isArray((feed.alerts as { alerts?: unknown[] })?.alerts)
     ? ((feed.alerts as { alerts: Record<string, unknown>[] }).alerts)
     : [];
-  alerts.forEach((a, i) => {
-    const at = Math.max(0, Math.floor(Number(a.seek ?? 0)));
-    if (at >= run.feedCursor && at <= elapsed) {
-      events.push({ kind: "ALERT", refId: String(a.id ?? `a${i}`), atSeconds: at, payload: a });
-    }
-  });
+  const alerts = rawAlerts
+    .map((a, i) => ({ a, at: Math.max(0, Math.floor(Number(a.seek ?? 0))), i }))
+    .filter((x) => x.at <= elapsed)
+    .sort((x, y) => x.at - y.at)
+    .map((x) => ({ ...x.a, id: x.a.id ?? `a${x.i}`, at: x.at }));
 
-  const logs = Array.isArray((feed.logs as { entries?: unknown[] })?.entries)
+  const rawLogs = Array.isArray((feed.logs as { entries?: unknown[] })?.entries)
     ? ((feed.logs as { entries: Record<string, unknown>[] }).entries)
     : [];
-  const offsets = logOffsets(logs as { ts?: string }[]);
-  logs.forEach((l, i) => {
-    const off = offsets[i];
-    if (off >= run.feedCursor && off <= elapsed) {
-      events.push({ kind: "LOG", refId: `l${i}`, atSeconds: off, payload: l });
-    }
-  });
+  const offsets = logOffsets(rawLogs as { ts?: string }[]);
+  const logs = rawLogs
+    .map((l, i) => ({ l, at: offsets[i], i }))
+    .filter((x) => x.at <= elapsed)
+    .sort((x, y) => x.at - y.at)
+    .map((x) => ({ ...x.l, at: x.at }));
 
-  if (events.length) {
-    await prisma.runEvent.createMany({
-      data: events.map((e) => ({ runId: run.id, ...e, payload: e.payload as object })),
-      skipDuplicates: true,
-    });
-  }
-  await prisma.scenarioRun.update({
-    where: { id: run.id },
-    data: { feedCursor: elapsed + 1, lastTickAt: new Date() },
-  });
-  return events.length;
+  return { alerts, logs };
 }
 
 /** Mark a student's run COMPLETED, banking the elapsed time. Idempotent. */
@@ -96,11 +72,13 @@ export async function completeRunFor(studentId: string, scenarioId: string): Pro
   });
 }
 
-/** Materialize one run then read its fired feed — used by the poll API. */
+/**
+ * Compute a run's current elapsed + fired feed for the poll API. Reading, not
+ * writing — reloading tomorrow returns everything that had fired at the current
+ * (frozen, if paused) elapsed.
+ */
 export async function tickAndReadRun(run: {
-  id: string;
   scenarioId: string;
-  feedCursor: number;
   status: "RUNNING" | "PAUSED" | "COMPLETED";
   runningSince: Date | null;
   accumulatedSeconds: number;
@@ -110,15 +88,6 @@ export async function tickAndReadRun(run: {
     where: { id: run.scenarioId },
     select: { alerts: true, logs: true },
   });
-  if (scenario) await materializeRun(run, scenario, elapsed);
-
-  const events = await prisma.runEvent.findMany({
-    where: { runId: run.id },
-    orderBy: [{ atSeconds: "asc" }, { firedAt: "asc" }],
-  });
-  return {
-    elapsed,
-    alerts: events.filter((e) => e.kind === "ALERT").map((e) => ({ ...(e.payload as object), firedAt: e.firedAt })),
-    logs: events.filter((e) => e.kind === "LOG").map((e) => ({ ...(e.payload as object), firedAt: e.firedAt })),
-  };
+  if (!scenario) return { elapsed, alerts: [], logs: [] };
+  return { elapsed, ...feedAt(scenario, elapsed) };
 }

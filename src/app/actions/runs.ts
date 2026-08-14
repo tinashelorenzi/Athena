@@ -53,7 +53,10 @@ export async function pauseRun(scenarioId: string): Promise<RunState> {
   const a = await authStudent(scenarioId);
   if ("error" in a) return { error: a.error };
 
-  const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { type: true } });
+  const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { type: true, realtime: true } });
+  if (scenario?.realtime) {
+    return { error: "This is a real-time simulation — it runs continuously and can't be paused." };
+  }
   if (scenario?.type === "ASSESSMENT") {
     return { error: "Assessments can't be paused — they run to the end." };
   }

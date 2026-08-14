@@ -54,6 +54,7 @@ export async function createScenario(
   const description = String(formData.get("description") ?? "").trim();
   const exposure = formData.get("exposure") === "PUBLIC" ? "PUBLIC" : "ROLLOUT";
   const hidden = type === "DOJO" && formData.get("hidden") === "on";
+  const realtime = formData.get("realtime") === "on";
   const brief = String(formData.get("brief") ?? "");
   const reportRequired = formData.get("reportRequired") === "on";
   const reportPrompt = String(formData.get("reportPrompt") ?? "").trim() || null;
@@ -95,6 +96,7 @@ export async function createScenario(
       description,
       exposure,
       hidden,
+      realtime,
       brief,
       reportRequired,
       reportPrompt,
@@ -137,6 +139,7 @@ export async function updateScenarioBasics(
       description: String(formData.get("description") ?? "").trim(),
       exposure: formData.get("exposure") === "PUBLIC" ? "PUBLIC" : "ROLLOUT",
       hidden: type === "DOJO" && formData.get("hidden") === "on",
+      realtime: formData.get("realtime") === "on",
       brief: String(formData.get("brief") ?? ""),
       reportRequired: formData.get("reportRequired") === "on",
       reportPrompt: String(formData.get("reportPrompt") ?? "").trim() || null,

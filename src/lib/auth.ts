@@ -29,7 +29,7 @@ function hashToken(token: string): string {
  * but `SESSION_COOKIE_SECURE=false` forces it off so login works over plain HTTP
  * (e.g. an HTTP staging box). `SESSION_COOKIE_SECURE=true` forces it on.
  */
-function useSecureCookie(): boolean {
+function secureCookieEnabled(): boolean {
   const flag = process.env.SESSION_COOKIE_SECURE;
   if (flag === "true") return true;
   if (flag === "false") return false;
@@ -53,7 +53,7 @@ export async function createSession(userId: string): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: useSecureCookie(),
+    secure: secureCookieEnabled(),
     sameSite: "lax",
     expires: expiresAt,
     path: "/",
