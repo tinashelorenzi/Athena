@@ -1,12 +1,14 @@
-# Athena local infrastructure.
+# Athena infrastructure.
 #
-# `docker compose up -d` starts PostgreSQL provisioned from the credentials in
-# `.env` (Compose auto-loads that file for ${VAR} substitution). The Next.js app
-# and Prisma connect to the same database via DATABASE_URL in that .env.
+# Data services (Postgres + MinIO) come up by default; the app + workers are
+# opt-in behind the `app` profile.
 #
-#   docker compose up -d        # start postgres in the background
-#   docker compose logs -f db   # tail the database logs
-#   docker compose down         # stop (add -v to also delete the data volume)
+#   docker compose up -d                     # postgres + minio + create bucket
+#   ./minio-credentials.sh                   # mint storage creds for Settings
+#   docker compose --profile app up -d       # ...also build & run the app + workers
+#   docker compose down                      # stop (add -v to wipe data volumes)
+#
+# All values come from .env (Compose auto-loads it for ${VAR} substitution).
 
 services:
   db:
@@ -18,8 +20,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      # host:container — publish on POSTGRES_PORT (default 5432) so the Next.js
-      # dev server on the host can reach it at localhost:${POSTGRES_PORT}.
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - athena-pgdata:/var/lib/postgresql/data
@@ -29,5 +29,81 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    image: minio/minio:latest
+    container_name: athena-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"           # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"   # web console
+    volumes:
+      - athena-minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: create the bucket and keep it private (served via the app, not
+  # anonymously). Retries until MinIO is reachable, then exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        until mc mb --ignore-existing local/$$MINIO_BUCKET; do
+          echo 'waiting for minio...'; sleep 2;
+        done &&
+        mc anonymous set none local/$$MINIO_BUCKET &&
+        echo "MinIO bucket ready (private): $$MINIO_BUCKET"
+    restart: "no"
+
+  app:
+    profiles: ["app"]
+    build: .
+    container_name: athena-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      ATHENA_SETTINGS_KEY: ${ATHENA_SETTINGS_KEY}
+      # HTTP staging → set SESSION_COOKIE_SECURE=false in .env, or serve over HTTPS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+    command: sh -c "npx prisma migrate deploy && npm run start"
+    ports:
+      - "3000:3000"
+
+  workers:
+    profiles: ["app"]
+    build: .
+    container_name: athena-workers
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      ATHENA_SETTINGS_KEY: ${ATHENA_SETTINGS_KEY}
+    command: npx pm2-runtime start ecosystem.config.js
+
 volumes:
   athena-pgdata:
+  athena-minio:
