@@ -39,6 +39,7 @@ model User {
   submissions  Submission[]
   progress     ScenarioProgress[]
   runs         ScenarioRun[]
+  guideSolves  GuidePromptSolve[]
 
   @@index([cohortId])
   @@map("users")
@@ -177,6 +178,13 @@ model Scenario {
   reportPrompt   String?            @db.Text
   logs           Json? // { version, entries: [...] }
   alerts         Json? // { version, alerts: [{ seek, ... }] }
+  /// Teaching guide (from an uploaded folder's main.md). `guide` is the markdown
+  /// with ```prompt blocks replaced by `[[prompt:id]]` sentinels; `guidePrompts`
+  /// holds the parsed prompts incl. answers (server-only); `guideAssets` lists
+  /// the uploaded image/asset relative paths (served from object storage).
+  guide          String?            @db.Text
+  guidePrompts   Json?
+  guideAssets    Json?
   createdById    String
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -185,9 +193,25 @@ model Scenario {
   submissions    Submission[]
   progress       ScenarioProgress[]
   runs           ScenarioRun[]
+  guideSolves    GuidePromptSolve[]
 
   @@index([type])
   @@map("scenarios")
+}
+
+/// A student's solved guide prompt (CTF-style progress within a scenario guide).
+model GuidePromptSolve {
+  id         String   @id @default(cuid())
+  scenarioId String
+  scenario   Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  promptId   String
+  solvedAt   DateTime @default(now())
+
+  @@unique([scenarioId, studentId, promptId])
+  @@index([studentId])
+  @@map("guide_prompt_solves")
 }
 
 /// A student's live run of a scenario. Holds a server-authoritative clock so the

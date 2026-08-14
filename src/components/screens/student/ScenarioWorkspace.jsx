@@ -5,10 +5,11 @@ import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { Markdown } from '@/components/Markdown';
 import { StudentTopBar } from './StudentTopBar';
+import { GuideView } from './GuideView';
 import { submitScenario } from '@/app/actions/submissions';
-import { startRun, pauseRun, resumeRun } from '@/app/actions/runs';
+import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 
-const PANELS = [
+const BASE_PANELS = [
   { id: 'brief', label: 'Brief', icon: 'BookOpen' },
   { id: 'alerts', label: 'Alerts', icon: 'Bell' },
   { id: 'logs', label: 'Logs', icon: 'ScrollText' },
@@ -19,9 +20,10 @@ const PANELS = [
 
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
 
-export function ScenarioWorkspace({ user, scenario, submission, initialRun }) {
+export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds }) {
   const router = useRouter();
-  const [panel, setPanel] = useState('brief');
+  const PANELS = scenario.hasGuide ? [{ id: 'guide', label: 'Guide', icon: 'GraduationCap' }, ...BASE_PANELS] : BASE_PANELS;
+  const [panel, setPanel] = useState(scenario.hasGuide ? 'guide' : 'brief');
   const [run, setRun] = useState(initialRun);
   const [err, setErr] = useState(null);
   const [busy, startTransition] = useTransition();
@@ -78,7 +80,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun }) {
 
       {/* run control bar */}
       <div style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
-        <RunControls run={run} canPause={canPause} busy={busy} onRun={() => act(startRun)} onPause={() => act(pauseRun)} onResume={() => act(resumeRun)} />
+        <RunControls run={run} canPause={canPause} busy={busy} onRun={() => act(startRun)} onPause={() => act(pauseRun)} onResume={() => act(resumeRun)} onComplete={() => act(completeRun)} />
         <div style={{ flex: 1 }} />
         {err && <span style={{ fontSize: 12.5, color: 'var(--status-danger, #ef4444)' }}>{err}</span>}
       </div>
@@ -103,6 +105,12 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun }) {
 
         <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
           <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
+            {panel === 'guide' && (
+              <div>
+                <PanelTitle icon="GraduationCap" title="Guide" sub="Work through the guide and solve the prompts as you go." />
+                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} />
+              </div>
+            )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
             {panel === 'alerts' && <FeedPanel kind="alerts" run={run} />}
             {panel === 'logs' && <FeedPanel kind="logs" run={run} />}
@@ -116,7 +124,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun }) {
   );
 }
 
-function RunControls({ run, canPause, busy, onRun, onPause, onResume }) {
+function RunControls({ run, canPause, busy, onRun, onPause, onResume, onComplete }) {
   const status = run.status;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -127,17 +135,20 @@ function RunControls({ run, canPause, busy, onRun, onPause, onResume }) {
           {canPause
             ? <AC.Button variant="secondary" size="sm" loading={busy} leadingIcon={<Icon name="Pause" size={14} />} onClick={onPause}>Pause</AC.Button>
             : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Assessment · runs to the end</span>}
+          <AC.Button variant="ghost" size="sm" loading={busy} leadingIcon={<Icon name="Flag" size={14} />} onClick={onComplete}>Finish</AC.Button>
         </>
       )}
       {status === 'PAUSED' && (
         <>
           <AC.Badge tone="warning" dot square>Paused</AC.Badge>
           <AC.Button variant="primary" size="sm" loading={busy} leadingIcon={<Icon name="Play" size={14} />} onClick={onResume}>Resume</AC.Button>
+          <AC.Button variant="ghost" size="sm" loading={busy} leadingIcon={<Icon name="Flag" size={14} />} onClick={onComplete}>Finish</AC.Button>
         </>
       )}
+      {status === 'COMPLETED' && <AC.Badge tone="brand" dot square>Completed</AC.Badge>}
       {status !== 'NONE' && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
-          <Icon name="Timer" size={14} style={{ color: 'var(--text-tertiary)' }} /> T+{fmtClock(run.elapsed ?? 0)}
+          <Icon name="Timer" size={14} style={{ color: 'var(--text-tertiary)' }} /> T+{fmtClock(run.elapsed ?? 0)}{status === 'COMPLETED' ? ' · final' : ''}
         </span>
       )}
     </div>

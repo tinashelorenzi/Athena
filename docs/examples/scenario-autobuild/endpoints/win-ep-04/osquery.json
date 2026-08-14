@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hostname": "win-ep-04",
+  "tables": {
+    "processes": [
+      { "pid": 6624, "name": "powershell.exe", "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "cmdline": "powershell -nop -w hidden -enc SQBFAF...", "parent": 4188, "uid": "svc-batch", "on_disk": 1 },
+      { "pid": 4188, "name": "winword.exe", "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE", "parent": 812, "uid": "j.mensah", "on_disk": 1 }
+    ],
+    "listening_ports": [
+      { "pid": 6624, "port": 4444, "protocol": "tcp", "address": "0.0.0.0" }
+    ],
+    "scheduled_tasks": [
+      { "name": "Updater", "action": "C:\\ProgramData\\svc.exe", "path": "\\Microsoft\\Windows\\Updater", "enabled": 1, "hidden": 0 }
+    ],
+    "startup_items": [
+      { "name": "Updater", "path": "C:\\ProgramData\\svc.exe", "source": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "type": "Registry" }
+    ]
+  }
+}

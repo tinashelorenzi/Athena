@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon';
 import { updateScenarioBasics, deleteScenario, saveEndpoint, removeEndpoint } from '@/app/actions/scenarios';
 import { ScenarioFields, Field } from './scenarios/ScenarioFields';
 import { JsonField } from './scenarios/JsonField';
+import { GuideUploader } from './scenarios/GuideUploader';
 import { FormStatus } from './settings/parts';
 
 const TYPE_META = { DOJO: { tone: 'brand', label: 'Dojo' }, ASSESSMENT: { tone: 'accent', label: 'Assessment' } };
@@ -51,6 +52,8 @@ export function ScenarioEditor({ scenario, endpoints }) {
           <AC.Badge tone={scenario.hasAlerts ? 'success' : 'neutral'} dot square>Alerts {scenario.hasAlerts ? 'present' : 'none'}</AC.Badge>
         </div>
       </AC.Card>
+
+      <GuideUploader scenarioId={scenario.id} guide={scenario.guideStatus} preview={scenario.guidePreview} />
 
       <EndpointsManager scenarioId={scenario.id} endpoints={endpoints} onError={setError} />
 

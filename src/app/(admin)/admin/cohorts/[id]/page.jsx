@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { CohortDetail } from '@/components/screens/CohortDetail';
 import { prisma } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
+import { getCohortLeaderboard } from '@/lib/reputation';
 
 export default async function CohortDetailPage({ params }) {
   await requireRole('SUPER_ADMIN');
@@ -21,6 +22,7 @@ export default async function CohortDetailPage({ params }) {
   });
   if (!cohort) notFound();
 
+  const leaderboard = await getCohortLeaderboard(id);
   const [allScenarios, submissions] = await Promise.all([
     prisma.scenario.findMany({ orderBy: { title: 'asc' }, select: { id: true, title: true, type: true } }),
     prisma.submission.findMany({
@@ -35,6 +37,7 @@ export default async function CohortDetailPage({ params }) {
   return (
     <CohortDetail
       cohort={{ id: cohort.id, name: cohort.name }}
+      leaderboard={leaderboard}
       students={cohort.students}
       bound={cohort.scenarios.map((cs) => ({ bindingId: cs.id, scenarioId: cs.scenario.id, title: cs.scenario.title, type: cs.scenario.type }))}
       invitations={cohort.invitations.map((i) => ({

@@ -16,9 +16,10 @@ const TABS = [
   { id: 'invite', label: 'Invite', icon: <Icon name="MailPlus" size={15} /> },
   { id: 'scenarios', label: 'Scenarios', icon: <Icon name="Boxes" size={15} /> },
   { id: 'grading', label: 'Grading', icon: <Icon name="GraduationCap" size={15} /> },
+  { id: 'standings', label: 'Standings', icon: <Icon name="Trophy" size={15} /> },
 ];
 
-export function CohortDetail({ cohort, students, bound, invitations, allScenarios, submissions }) {
+export function CohortDetail({ cohort, leaderboard, students, bound, invitations, allScenarios, submissions }) {
   const [tab, setTab] = useState('members');
   const [confirmDel, setConfirmDel] = useState(false);
   const [error, setError] = useState(null);
@@ -42,6 +43,7 @@ export function CohortDetail({ cohort, students, bound, invitations, allScenario
       {tab === 'invite' && <InviteTab cohort={cohort} invitations={invitations} onError={setError} />}
       {tab === 'scenarios' && <ScenariosTab cohort={cohort} bound={bound} allScenarios={allScenarios} onError={setError} />}
       {tab === 'grading' && <GradingTab submissions={submissions} onError={setError} />}
+      {tab === 'standings' && <StandingsTab leaderboard={leaderboard} />}
 
       <AC.Dialog
         open={confirmDel}
@@ -317,6 +319,29 @@ function GradeDialog({ submission, onClose, onError }) {
         </div>
       </div>
     </AC.Dialog>
+  );
+}
+
+function StandingsTab({ leaderboard }) {
+  const rows = (leaderboard || []).map((r, i) => ({ ...r, rank: i + 1 }));
+  return (
+    <AC.Card padded={false} header={<SecHeader icon="Trophy" title="Standings" subtitle="Reputation earned from graded assessments, highest first." />}>
+      {rows.length === 0 ? (
+        <div style={{ padding: 8 }}><AC.EmptyState icon={<Icon name="Trophy" size={22} />} title="No standings yet" description="Reputation appears once assessment submissions are graded." /></div>
+      ) : (
+        <AC.Table
+          rowKey="id"
+          hover={false}
+          columns={[
+            { key: 'rank', header: '#', width: '50px', mono: true },
+            { key: 'name', header: 'Student', primary: true },
+            { key: 'assessments', header: 'Assessments', align: 'right', mono: true, width: '130px' },
+            { key: 'reputation', header: 'Reputation', align: 'right', mono: true, width: '120px' },
+          ]}
+          rows={rows}
+        />
+      )}
+    </AC.Card>
   );
 }
 

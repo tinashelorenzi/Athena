@@ -32,6 +32,17 @@ export default async function ScenarioDetailPage({ params }) {
     reportPrompt: scenario.reportPrompt || '',
     hasLogs: scenario.logs != null,
     hasAlerts: scenario.alerts != null,
+    guideStatus: scenario.guide
+      ? {
+          has: true,
+          promptCount: Array.isArray(scenario.guidePrompts) ? scenario.guidePrompts.length : 0,
+          assetCount: Array.isArray(scenario.guideAssets) ? scenario.guideAssets.length : 0,
+        }
+      : { has: false, promptCount: 0, assetCount: 0 },
+    // Instructor preview (answers included — instructor-side only).
+    guidePreview: scenario.guide
+      ? { markdown: scenario.guide, prompts: Array.isArray(scenario.guidePrompts) ? scenario.guidePrompts : [] }
+      : null,
   };
 
   const endpoints = scenario.endpoints.map((e) => ({

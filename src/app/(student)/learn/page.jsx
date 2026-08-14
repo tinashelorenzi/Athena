@@ -1,20 +1,28 @@
 import { StudentHome } from '@/components/screens/student/StudentHome';
 import { requireUser } from '@/lib/auth';
 import { getStudentScenarios } from '@/lib/student';
+import { getStudentStanding, getStudentRank, getCohortLeaderboard } from '@/lib/reputation';
 import { prisma } from '@/lib/db';
 
-/* Student home — the scenarios released to their cohort. */
+/* Student home — the scenarios released to their cohort, plus their standing. */
 export default async function LearnPage() {
   const user = await requireUser();
-  const [scenarios, dbUser] = await Promise.all([
+  const [scenarios, dbUser, standing, rank] = await Promise.all([
     getStudentScenarios(user.id),
-    prisma.user.findUnique({ where: { id: user.id }, select: { cohort: { select: { name: true } } } }),
+    prisma.user.findUnique({ where: { id: user.id }, select: { cohort: { select: { id: true, name: true } } } }),
+    getStudentStanding(user.id),
+    getStudentRank(user.id),
   ]);
+
+  const leaderboard = dbUser?.cohort?.id ? await getCohortLeaderboard(dbUser.cohort.id) : [];
 
   return (
     <StudentHome
-      user={{ name: user.name, cohort: dbUser?.cohort?.name ?? null }}
+      user={{ id: user.id, name: user.name, cohort: dbUser?.cohort?.name ?? null }}
       scenarios={scenarios}
+      standing={standing}
+      rank={rank}
+      leaderboard={leaderboard}
     />
   );
 }

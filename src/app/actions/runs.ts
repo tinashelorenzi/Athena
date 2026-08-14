@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { isAuthorizedForScenario } from "@/lib/student";
-import { computeElapsed } from "@/lib/run-engine";
+import { computeElapsed, completeRunFor } from "@/lib/run-engine";
 
 export type RunState = {
   error?: string;
@@ -89,4 +89,16 @@ export async function resumeRun(scenarioId: string): Promise<RunState> {
     data: { status: "RUNNING", runningSince: new Date() },
   });
   return { status: "RUNNING", elapsed: computeElapsed(updated) };
+}
+
+/** Finish a run — freezes the clock and stops the feed. */
+export async function completeRun(scenarioId: string): Promise<RunState> {
+  const a = await authStudent(scenarioId);
+  if ("error" in a) return { error: a.error };
+
+  await completeRunFor(a.user.id, scenarioId);
+  const run = await prisma.scenarioRun.findUnique({
+    where: { scenarioId_studentId: { scenarioId, studentId: a.user.id } },
+  });
+  return { status: run?.status ?? "COMPLETED", elapsed: run ? computeElapsed(run) : 0 };
 }

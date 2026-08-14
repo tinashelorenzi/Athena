@@ -83,6 +83,19 @@ export async function materializeRun(
   return events.length;
 }
 
+/** Mark a student's run COMPLETED, banking the elapsed time. Idempotent. */
+export async function completeRunFor(studentId: string, scenarioId: string): Promise<void> {
+  const run = await prisma.scenarioRun.findUnique({
+    where: { scenarioId_studentId: { scenarioId, studentId } },
+  });
+  if (!run || run.status === "COMPLETED") return;
+  const banked = computeElapsed(run);
+  await prisma.scenarioRun.update({
+    where: { id: run.id },
+    data: { status: "COMPLETED", accumulatedSeconds: banked, runningSince: null },
+  });
+}
+
 /** Materialize one run then read its fired feed — used by the poll API. */
 export async function tickAndReadRun(run: {
   id: string;

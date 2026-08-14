@@ -21,6 +21,9 @@ export function ScenariosList({ scenarios }) {
           <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>Scenarios</h2>
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>{scenarios.length} authored · Dojos and Assessments</p>
         </div>
+        <Link href="/admin/scenarios/auto" style={{ textDecoration: 'none' }}>
+          <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PackageOpen" size={14} />}>Auto-build</AC.Button>
+        </Link>
         <Link href="/admin/scenarios/new" style={{ textDecoration: 'none' }}>
           <AC.Button variant="primary" size="sm" leadingIcon={<Icon name="Plus" size={14} />}>New scenario</AC.Button>
         </Link>

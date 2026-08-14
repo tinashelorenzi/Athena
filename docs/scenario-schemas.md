@@ -25,6 +25,15 @@ these schemas), not in the student-facing bundles.
 | `ScenarioEndpoint.edr` | EDR sample | [edr-schema.md](./edr-schema.md) | Per-endpoint live state: process tree, connections, browser and shell history. |
 | `ScenarioEndpoint.osquery` | OSQuery data | [osquery-schema.md](./osquery-schema.md) | Per-endpoint osquery table snapshots (SQL-table data model). |
 | Object storage | Evidence artifacts | [artifacts.md](./artifacts.md) | One uploaded evidence ZIP per endpoint (memory dump, pcap, disk excerpt). |
+| `Scenario.guide` | Learning guide | [guide-folder.md](./guide-folder.md) | Teaching guide folder (`main.md` + images) with inline CTF `prompt` blocks. |
+
+## Building whole scenarios
+
+Rather than filling the form field by field, you can assemble a scenario as a
+folder and drop it into the **[Auto-builder](./autobuild.md)** — one folder with a
+`scenario.json` manifest that references all of the bundles above (plus the brief
+and guide). A complete example lives in
+[`examples/scenario-autobuild/`](./examples/scenario-autobuild/).
 
 ## Shared conventions
 

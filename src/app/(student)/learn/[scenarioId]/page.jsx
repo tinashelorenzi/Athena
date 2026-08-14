@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { ScenarioWorkspace } from '@/components/screens/student/ScenarioWorkspace';
 import { requireUser } from '@/lib/auth';
 import { getStudentScenario, ensureProgress, publicFlags } from '@/lib/student';
+import { publicPrompts } from '@/lib/guide';
 import { prisma } from '@/lib/db';
 import { tickAndReadRun } from '@/lib/run-engine';
 
@@ -40,7 +41,15 @@ export default async function ScenarioWorkspacePage({ params }) {
       hasArtifact: Boolean(e.artifactKey),
     })),
     startedAt: startedAt.toISOString(),
+    hasGuide: Boolean(scenario.guide),
+    guide: scenario.guide || '',
+    guidePrompts: publicPrompts(scenario.guidePrompts),
   };
+
+  const guideSolves = scenario.guide
+    ? await prisma.guidePromptSolve.findMany({ where: { studentId: user.id, scenarioId }, select: { promptId: true } })
+    : [];
+  const solvedIds = guideSolves.map((s) => s.promptId);
 
   const sub = submission
     ? {
@@ -63,5 +72,5 @@ export default async function ScenarioWorkspacePage({ params }) {
     initialRun = { status: run.status, elapsed, alerts, logs, startedAt: run.startedAt.toISOString() };
   }
 
-  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} />;
+  return <ScenarioWorkspace user={{ name: user.name }} scenario={view} submission={sub} initialRun={initialRun} solvedIds={solvedIds} />;
 }

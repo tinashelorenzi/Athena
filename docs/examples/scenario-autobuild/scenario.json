@@ -1,0 +1,28 @@
+{
+  "type": "DOJO",
+  "title": "Ransomware in Finance (Example)",
+  "description": "A finance workstation shows signs of ransomware staging. Trace the intrusion from initial access to impact.",
+  "exposure": "ROLLOUT",
+  "hidden": false,
+  "brief": "brief.md",
+  "objectives": [
+    "Identify the initial access vector",
+    "Find the command-and-control (C2) server",
+    "Identify the persistence mechanism"
+  ],
+  "flags": [
+    { "question": "What is the C2 IP address?", "answer": "185.220.101.34", "points": 10 },
+    { "question": "Which process spawned powershell.exe?", "answer": "winword.exe", "points": 10 }
+  ],
+  "report": { "required": true, "prompt": "Summarize the intrusion timeline from initial access to impact." },
+  "guide": "guide/main.md",
+  "logs": "logs.json",
+  "alerts": "alerts.json",
+  "endpoints": [
+    {
+      "hostname": "win-ep-04",
+      "edr": "endpoints/win-ep-04/edr.json",
+      "osquery": "endpoints/win-ep-04/osquery.json"
+    }
+  ]
+}

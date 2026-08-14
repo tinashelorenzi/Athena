@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "alerts": [
+    { "id": "ALT-4821", "seek": 0, "title": "Encoded PowerShell command executed", "host": "win-ep-04", "source": "10.0.0.5", "destination": "185.220.101.34", "rule": "T1059.001", "count": 24 },
+    { "id": "ALT-4815", "seek": 20, "title": "Outbound connection to known C2", "host": "win-ep-04", "destination": "185.220.101.34", "rule": "T1071", "count": 3 },
+    { "id": "ALT-4820", "seek": 55, "title": "Shadow copies deleted (vssadmin)", "host": "win-ep-04", "rule": "T1490", "count": 1 }
+  ]
+}

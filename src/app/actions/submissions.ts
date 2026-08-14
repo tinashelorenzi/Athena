@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { isAuthorizedForScenario, publicFlags } from "@/lib/student";
+import { completeRunFor } from "@/lib/run-engine";
 
 export type SubmitState = { error?: string; ok?: string };
 
@@ -24,7 +25,7 @@ export async function submitScenario(
 
   const scenario = await prisma.scenario.findUnique({
     where: { id: scenarioId },
-    select: { flags: true, reportRequired: true },
+    select: { flags: true, reportRequired: true, type: true },
   });
   if (!scenario) return { error: "Scenario not found." };
 
@@ -45,6 +46,9 @@ export async function submitScenario(
     update: { flagAnswers, report: report || null, status: "SUBMITTED", submittedAt: new Date() },
     create: { scenarioId, studentId: user.id, flagAnswers, report: report || null },
   });
+
+  // Submitting an assessment finishes the run (it runs to the end, no re-do vibe).
+  if (scenario.type === "ASSESSMENT") await completeRunFor(user.id, scenarioId);
 
   revalidatePath(`/learn/${scenarioId}`);
   return { ok: "Deliverables submitted. Your instructor will grade them." };
