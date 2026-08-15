@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { Markdown } from '@/components/Markdown';
+import { RichText } from '@/components/RichText';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
 import { AlertCaseDialog } from './AlertCaseDialog';
@@ -535,7 +536,7 @@ function SubmitForm({ scenario, submission, preview }) {
             <Icon name="Award" size={22} style={{ color: 'var(--status-success, #22c55e)' }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Graded — {submission.grade ?? '—'} / 100</div>
-              {submission.feedback && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.5 }}>{submission.feedback}</div>}
+              {submission.feedback && <div style={{ marginTop: 6 }}><RichText html={submission.feedback} /></div>}
             </div>
           </div>
         </AC.Card>

@@ -102,6 +102,34 @@ export async function ensureProgress(userId: string, scenarioId: string): Promis
   return created.startedAt;
 }
 
+export type StudentResult = {
+  id: string;
+  scenarioTitle: string;
+  type: "DOJO" | "ASSESSMENT";
+  grade: number | null;
+  feedback: string;
+  reportFileName: string;
+  releasedAt: string;
+};
+
+/** A student's released, graded assessment results (with instructor feedback). */
+export async function getStudentResults(userId: string): Promise<StudentResult[]> {
+  const subs = await prisma.submission.findMany({
+    where: { studentId: userId, status: "GRADED", releasedAt: { not: null } },
+    orderBy: { releasedAt: "desc" },
+    include: { scenario: { select: { title: true, type: true } } },
+  });
+  return subs.map((s) => ({
+    id: s.id,
+    scenarioTitle: s.scenario.title,
+    type: s.scenario.type as "DOJO" | "ASSESSMENT",
+    grade: s.grade,
+    feedback: s.feedback || "",
+    reportFileName: s.reportFileName || "",
+    releasedAt: (s.releasedAt as Date).toISOString(),
+  }));
+}
+
 /** Strip answers from authored flags before sending to a student. */
 export function publicFlags(flags: unknown): { id: string; question: string; points: number }[] {
   if (!Array.isArray(flags)) return [];

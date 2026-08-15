@@ -1,13 +1,14 @@
 'use client';
 import React, { useState, useActionState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { deleteCohort, bindScenarios, unbindScenario, removeFromCohort } from '@/app/actions/cohorts';
 import { sendInvitations, revokeInvitation } from '@/app/actions/invitations';
 import { createStudent } from '@/app/actions/students';
-import { gradeSubmission, setGradeReleased } from '@/app/actions/grading';
 import { generatePassword } from '@/lib/password-gen';
+import { GradeReviewDialog } from './grading/GradeReviewDialog';
 import { Textarea } from './scenarios/primitives';
 import { FormStatus } from './settings/parts';
 
@@ -320,6 +321,7 @@ function BindDialog({ open, onClose, cohortId, scenarios, onError }) {
 }
 
 function GradingTab({ submissions, onError }) {
+  const router = useRouter();
   const [grading, setGrading] = useState(null); // submission row
 
   return (
@@ -351,96 +353,8 @@ function GradingTab({ submissions, onError }) {
         )}
       </AC.Card>
 
-      <GradeDialog key={grading?.id || 'none'} submission={grading} onClose={() => setGrading(null)} onError={onError} />
+      <GradeReviewDialog key={grading?.id || 'none'} submission={grading} onClose={() => setGrading(null)} onError={onError} onDone={() => router.refresh()} />
     </div>
-  );
-}
-
-function GradeDialog({ submission, onClose, onError }) {
-  // Prefilled from the committed grade — the call site keys this by submission
-  // id, so it remounts (and re-initialises) each time a row is opened.
-  const [grade, setGrade] = useState(submission?.grade != null ? String(submission.grade) : '');
-  const [feedback, setFeedback] = useState(submission?.feedback || '');
-  const [busy, setBusy] = useState(false);
-  if (!submission) return null;
-
-  const released = submission.released;
-  const graded = submission.status === 'GRADED';
-
-  const commit = async (release) => {
-    setBusy(true);
-    const res = await gradeSubmission(submission.id, Number(grade), feedback, release);
-    setBusy(false);
-    if (res?.error) { onError(res.error); return; }
-    onClose();
-  };
-  const toggleRelease = async (next) => {
-    setBusy(true);
-    const res = await setGradeReleased(submission.id, next);
-    setBusy(false);
-    if (res?.error) { onError(res.error); return; }
-    onClose();
-  };
-
-  return (
-    <AC.Dialog
-      open
-      title={`Grade — ${submission.studentName}`}
-      description={submission.scenarioTitle}
-      icon={<Icon name="PenLine" size={18} />}
-      onClose={onClose}
-      footer={<>
-        <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
-        {graded && released && (
-          <AC.Button variant="secondary" loading={busy} leadingIcon={<Icon name="EyeOff" size={14} />} onClick={() => toggleRelease(false)}>Hold</AC.Button>
-        )}
-        <AC.Button variant="secondary" loading={busy} onClick={() => commit(false)}>Save (hold)</AC.Button>
-        <AC.Button variant="primary" loading={busy} leadingIcon={<Icon name="Send" size={14} />} onClick={() => commit(true)}>Save &amp; release</AC.Button>
-      </>}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-tertiary)' }}>
-          <Icon name={released ? 'Eye' : 'EyeOff'} size={14} />
-          {released ? 'Released — the student can see this grade.' : graded ? 'Graded but held — the student cannot see it yet.' : 'Not graded yet — the student sees “awaiting grading”.'}
-        </div>
-        {submission.flagReview?.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Flag answers</div>
-            {submission.flagReview.map((f, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)' }}>
-                <Icon name={f.correct ? 'CircleCheck' : 'CircleX'} size={15} style={{ color: f.correct ? 'var(--status-success, #22c55e)' : 'var(--status-danger, #ef4444)', flex: 'none' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{f.question}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{f.answer || '— no answer —'}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {(submission.report || submission.reportFileName) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Report</div>
-            {submission.reportFileName && (
-              <a href={`/api/submissions/${submission.id}/report`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)' }}>
-                  <Icon name="FileText" size={16} style={{ color: 'var(--accent, #7c8cff)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{submission.reportFileName}</span>
-                  <Icon name="Download" size={15} style={{ color: 'var(--text-tertiary)', flex: 'none' }} />
-                </div>
-              </a>
-            )}
-            {submission.report && (
-              <div style={{ maxHeight: 180, overflow: 'auto', padding: '10px 12px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)', fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{submission.report}</div>
-            )}
-          </div>
-        )}
-        <AC.Input label="Grade (0–100)" type="number" min={0} max={100} value={grade} onChange={(e) => setGrade(e.target.value)} leadingIcon={<Icon name="Hash" size={16} />} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Feedback (optional)</label>
-          <Textarea rows={4} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Notes for the student…" />
-        </div>
-      </div>
-    </AC.Dialog>
   );
 }
 
