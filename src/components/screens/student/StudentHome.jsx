@@ -15,7 +15,21 @@ const STATUS_META = {
   GRADED: { tone: 'success', label: 'Graded', cta: 'Review' },
 };
 
-export function StudentHome({ user, scenarios, standing, rank, leaderboard, results = [] }) {
+const CAPABILITIES = [
+  { icon: 'ScrollText', title: 'Discover logs', desc: 'Hunt through event logs with KQL search and a live histogram — just like Kibana Discover.' },
+  { icon: 'Bell', title: 'Triage alerts', desc: 'Work the alert queue in real time: set a verdict, take notes, and extract IOCs on each case.' },
+  { icon: 'TerminalSquare', title: 'EDR & OSQuery', desc: 'Inspect endpoint telemetry and run real SQL against host tables to find what happened.' },
+  { icon: 'Paperclip', title: 'Evidence', desc: 'Download forensic artifacts and dig into the detail behind each incident.' },
+  { icon: 'FileText', title: 'Report & grade', desc: 'Write up your findings and answer the flags. Your instructor grades and gives feedback.' },
+];
+
+const STEPS = [
+  { icon: 'MousePointerClick', title: 'Open a scenario', desc: 'Dojos teach you; assessments are graded.' },
+  { icon: 'Radar', title: 'Investigate', desc: 'Alerts, logs, EDR, OSQuery and artifacts — all in one workspace.' },
+  { icon: 'Send', title: 'Submit', desc: 'Answer the flags and write your report to close the case.' },
+];
+
+export function StudentHome({ user, scenarios, standing, rank, leaderboard, results = [], preview }) {
   const stats = useMemo(() => {
     const by = (st) => scenarios.filter((s) => s.status === st).length;
     const inProgress = by('IN_PROGRESS');
@@ -26,29 +40,19 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
     return { inProgress, done, graded, avg };
   }, [scenarios, results]);
 
-  // The one thing to nudge them toward next.
   const nextUp = useMemo(
     () => scenarios.find((s) => s.status === 'IN_PROGRESS') || scenarios.find((s) => s.status === 'NOT_STARTED') || null,
     [scenarios],
   );
+  const isNew = stats.done === 0;
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--surface-app)' }}>
       <StudentTopBar user={user} />
       <main style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: 1040, margin: '0 auto', padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 25, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-              Welcome back, {(user?.name || 'analyst').split(' ')[0]}
-            </h1>
-            <p style={{ fontSize: 14, color: 'var(--text-tertiary)', margin: 0 }}>
-              {user?.cohort ? <>Cohort · <strong style={{ color: 'var(--text-secondary)' }}>{user.cohort}</strong></> : 'Scenarios released to you will appear here.'}
-            </p>
-          </div>
+          <Hero user={user} standing={standing} rank={rank} />
 
-          <StandingBanner standing={standing} rank={rank} />
-
-          {/* Progress stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <AC.StatCard label="In progress" value={String(stats.inProgress)} icon={<Icon name="Radar" size={16} />} hint="Active investigations" />
             <AC.StatCard label="Completed" value={String(stats.done)} icon={<Icon name="CircleCheck" size={16} />} hint="Scenarios finished" />
@@ -58,23 +62,19 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
 
           {nextUp && <NextUp scenario={nextUp} />}
 
+          {isNew && <HowItWorks />}
+
           <div>
-            <SectionTitle icon="Boxes" title="Your scenarios" hint={`${scenarios.length} released to your cohort`} />
+            <SectionTitle icon="Boxes" title="Your scenarios" hint={scenarios.length ? `${scenarios.length} released to your cohort` : undefined} />
             {scenarios.length === 0 ? (
-              <AC.Card>
-                <AC.EmptyState
-                  icon={<Icon name="Compass" size={26} />}
-                  title="No scenarios yet"
-                  description={user?.cohort ? "Your instructor hasn't released any scenarios to your cohort yet. Check back soon." : "You're not in a cohort yet. Ask your instructor to add you."}
-                />
-              </AC.Card>
+              <Onboarding hasCohort={Boolean(user?.cohort)} />
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
                 {scenarios.map((s) => {
                   const st = STATUS_META[s.status] || STATUS_META.NOT_STARTED;
                   return (
-                    <AC.Card key={s.id}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 168 }}>
+                    <AC.Card key={s.id} hover>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 172 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <AC.Badge tone={TYPE_META[s.type].tone} square>{TYPE_META[s.type].label}</AC.Badge>
                           <div style={{ flex: 1 }} />
@@ -93,11 +93,84 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
             )}
           </div>
 
+          <div>
+            <SectionTitle icon="Crosshair" title="Inside the lab" hint="The tools you'll use on every case" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+              {CAPABILITIES.map((c) => (
+                <AC.Card key={c.title}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--brand-subtle-bg)', border: '1px solid var(--brand-subtle-border)', color: 'var(--brand)' }}>
+                      <Icon name={c.icon} size={17} />
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{c.title}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>{c.desc}</div>
+                  </div>
+                </AC.Card>
+              ))}
+            </div>
+          </div>
+
           {results.length > 0 && <Results results={results} />}
 
           {leaderboard && leaderboard.length > 1 && <Leaderboard rows={leaderboard} meId={user?.id} />}
         </div>
       </main>
+    </div>
+  );
+}
+
+/* ---- Hero: analyst profile + rank ring ---- */
+function Hero({ user, standing, rank }) {
+  const s = standing || { reputation: 0, title: 'Recruit', level: 1, floor: 0, nextAt: 100, assessmentsGraded: 0 };
+  const span = s.nextAt != null ? s.nextAt - s.floor : 0;
+  const pct = s.nextAt != null && span > 0 ? Math.min(100, Math.round(((s.reputation - s.floor) / span) * 100)) : 100;
+  const first = (user?.name || 'analyst').split(' ')[0];
+
+  return (
+    <div style={{
+      position: 'relative', overflow: 'hidden', borderRadius: 16, padding: 26,
+      background: 'linear-gradient(120deg, var(--brand) 0%, var(--blue-800) 55%, var(--blue-950) 100%)',
+      boxShadow: 'var(--shadow-md)',
+    }}>
+      <div aria-hidden style={{ position: 'absolute', inset: 0, opacity: 0.5, backgroundImage: 'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)', backgroundSize: '38px 38px', maskImage: 'radial-gradient(120% 80% at 100% 0%, #000, transparent 70%)', WebkitMaskImage: 'radial-gradient(120% 80% at 100% 0%, #000, transparent 70%)' }} />
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.14)', marginBottom: 12 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--highlight-yellow)' }} />
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: '#fff', letterSpacing: '0.02em' }}>SOC Analyst · {user?.cohort || 'Unassigned'}</span>
+          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: '#fff', margin: '0 0 6px', letterSpacing: '-0.02em' }}>Welcome back, {first}</h1>
+          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)', margin: 0, lineHeight: 1.5, maxWidth: 460 }}>
+            You're a <strong style={{ color: '#fff' }}>{s.title}</strong>{rank ? <> · ranked <strong style={{ color: '#fff' }}>#{rank.rank}</strong> of {rank.total} in your cohort</> : null}. Keep working cases to climb.
+          </p>
+          <div style={{ marginTop: 16, maxWidth: 360 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'rgba(255,255,255,0.7)', marginBottom: 5 }}>
+              <span>{s.reputation} rep</span>
+              <span>{s.nextAt != null ? `next: ${s.nextAt}` : 'Max level'}</span>
+            </div>
+            <div style={{ height: 7, borderRadius: 999, background: 'rgba(255,255,255,0.18)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--highlight-yellow)', borderRadius: 999 }} />
+            </div>
+          </div>
+        </div>
+        <RankRing level={s.level || 1} pct={pct} title={s.title} />
+      </div>
+    </div>
+  );
+}
+
+function RankRing({ level, pct, title }) {
+  const r = 40, C = 2 * Math.PI * r;
+  return (
+    <div style={{ position: 'relative', width: 130, textAlign: 'center', flex: 'none' }}>
+      <svg width={110} height={110} viewBox="0 0 110 110" style={{ display: 'block', margin: '0 auto' }}>
+        <circle cx="55" cy="55" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="8" />
+        <circle cx="55" cy="55" r={r} fill="none" stroke="var(--highlight-yellow)" strokeWidth="8" strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={C - (pct / 100) * C} transform="rotate(-90 55 55)" />
+        <text x="55" y="50" textAnchor="middle" fill="#fff" fontSize="26" fontWeight="700" fontFamily="var(--font-mono)">{level}</text>
+        <text x="55" y="68" textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10" letterSpacing="1.5">LEVEL</text>
+      </svg>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginTop: 4 }}>{title}</div>
     </div>
   );
 }
@@ -127,6 +200,49 @@ function NextUp({ scenario }) {
         <Link href={`/learn/${scenario.id}`} style={{ textDecoration: 'none' }}>
           <AC.Button variant="primary" trailingIcon={<Icon name="ArrowRight" size={15} />}>{inProgress ? 'Continue' : 'Start'}</AC.Button>
         </Link>
+      </div>
+    </AC.Card>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <div>
+      <SectionTitle icon="Route" title="How it works" hint="Three steps to your first solved case" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+        {STEPS.map((s, i) => (
+          <AC.Card key={s.title}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>{i + 1}</div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}><Icon name={s.icon} size={15} style={{ color: 'var(--text-secondary)' }} />{s.title}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5, marginTop: 3 }}>{s.desc}</div>
+              </div>
+            </div>
+          </AC.Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Onboarding({ hasCohort }) {
+  return (
+    <AC.Card>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ width: 46, height: 46, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center', background: 'var(--brand-subtle-bg)', border: '1px solid var(--brand-subtle-border)', color: 'var(--brand)' }}>
+          <Icon name={hasCohort ? 'Clock' : 'UserPlus'} size={22} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+            {hasCohort ? 'No scenarios released yet' : "You're not in a cohort yet"}
+          </div>
+          <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6, maxWidth: 560 }}>
+            {hasCohort
+              ? "Your instructor hasn't released any scenarios to your cohort yet. As soon as they do, they'll show up here — and you'll get a heads-up when new alerts start firing. In the meantime, here's what the lab has in store."
+              : 'Ask your instructor to add you to a cohort. Once you’re in, released scenarios will appear here and you can start working real SOC cases.'}
+          </p>
+        </div>
       </div>
     </AC.Card>
   );
@@ -174,42 +290,6 @@ function Results({ results }) {
         </div>
       </AC.Card>
     </div>
-  );
-}
-
-function StandingBanner({ standing, rank }) {
-  const s = standing || { reputation: 0, title: 'Recruit', floor: 0, nextAt: 100, assessmentsGraded: 0 };
-  const span = s.nextAt != null ? s.nextAt - s.floor : 0;
-  const pct = s.nextAt != null && span > 0 ? Math.min(100, Math.round(((s.reputation - s.floor) / span) * 100)) : 100;
-
-  return (
-    <AC.Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 12, background: 'var(--accent-subtle-bg)', border: '1px solid var(--accent-subtle-border)', display: 'grid', placeItems: 'center', color: 'var(--accent)' }}>
-            <Icon name="Medal" size={24} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{s.reputation}</span>
-              <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>reputation</span>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{s.title}{rank ? <span style={{ color: 'var(--text-tertiary)' }}> · rank #{rank.rank} of {rank.total}</span> : null}</div>
-          </div>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--text-tertiary)', marginBottom: 5 }}>
-            <span>{s.title}</span>
-            <span>{s.nextAt != null ? `${s.reputation} / ${s.nextAt}` : 'Max level'}</span>
-          </div>
-          <div style={{ height: 7, borderRadius: 999, background: 'var(--surface-inset)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 999 }} />
-          </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 6 }}>Earned from graded assessments · {s.assessmentsGraded} completed</div>
-        </div>
-      </div>
-    </AC.Card>
   );
 }
 
