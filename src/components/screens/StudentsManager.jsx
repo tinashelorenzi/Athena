@@ -3,6 +3,7 @@ import React, { useState, useTransition } from 'react';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { createStudent, resetStudentPassword, deleteStudent } from '@/app/actions/students';
+import { generatePassword } from '@/lib/password-gen';
 
 /* Student Management surface. Data (the `students` list) comes from the server
    page; mutations go through Server Actions which revalidate the list. */
@@ -16,8 +17,9 @@ export function StudentsManager({ students, cohorts = [] }) {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const [cohortSel, setCohortSel] = useState('');
+  const [pwd, setPwd] = useState('');
 
-  const openCreate = () => { setCreateError(null); setCohortSel(''); setCreateOpen(true); };
+  const openCreate = () => { setCreateError(null); setCohortSel(''); setPwd(generatePassword()); setCreateOpen(true); };
 
   // Call the Server Action directly and handle the result in the submit handler
   // (no effect needed). The action revalidates the list server-side.
@@ -122,13 +124,23 @@ export function StudentsManager({ students, cohorts = [] }) {
       <AC.Dialog
         open={createOpen}
         title="Add student"
-        description="A strong password is generated automatically and shown once."
+        description="Generate a password or type your own — it's shown once after creating."
         icon={<Icon name="UserPlus" size={18} />}
         onClose={() => setCreateOpen(false)}
       >
         <form onSubmit={onCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} />
           <AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Password</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <AC.Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} mono placeholder="At least 10 characters" leadingIcon={<Icon name="KeyRound" size={16} />} />
+              </div>
+              <AC.Button type="button" variant="secondary" leadingIcon={<Icon name="RefreshCw" size={14} />} onClick={() => setPwd(generatePassword())}>Generate</AC.Button>
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>Shown once after creating — copy it then. Or type your own.</span>
+          </div>
           <AC.Select
             label="Cohort (optional)"
             value={cohortSel}

@@ -38,7 +38,7 @@ export function invitationEmailHtml(opts: {
           <tr><td style="padding:8px 32px 28px;">
             <h1 style="margin:16px 0 12px;font-size:22px;line-height:1.25;color:#ffffff;font-weight:700;">You're invited to the Athena SOC Lab</h1>
             <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#c7cbd9;">
-              Your instructor has invited you to Athena — Zaio's Security Operations Center simulation lab. Click below to set your name and password and get started.
+              Your instructor has invited you to <strong style="color:#ffffff;">Athena</strong> — Zaio's browser-based Security Operations Center (SOC) lab. You'll investigate realistic security alerts, logs and endpoints the way a real SOC analyst does, and build the skills to spot and triage threats. Click below to set your name and password and start your first scenario.
             </p>
             ${cohortLine}
             <a href="${opts.acceptUrl}" style="display:inline-block;background:#2326b8;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 22px;border-radius:8px;">Accept invitation</a>

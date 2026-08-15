@@ -44,7 +44,14 @@ export async function createStudent(
     cohortId = cohort.id;
   }
 
-  const password = generatePassword();
+  // Use the instructor-provided password if given (e.g. the "Generate" button
+  // filled it, or they typed one); otherwise generate a strong one.
+  const provided = String(formData.get("password") ?? "");
+  if (provided && provided.length < 10) {
+    return { error: "Password must be at least 10 characters." };
+  }
+  const password = provided || generatePassword();
+
   await prisma.user.create({
     data: {
       name,
@@ -56,6 +63,8 @@ export async function createStudent(
   });
 
   revalidatePath("/admin/students");
+  if (cohortId) revalidatePath(`/admin/cohorts/${cohortId}`);
+  revalidatePath("/admin/cohorts");
   return { created: { name, email, password } };
 }
 

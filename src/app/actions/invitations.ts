@@ -2,23 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { requireRole, createSession } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { isMailConfigured, sendMail } from "@/lib/mailer";
+import { getBaseUrl } from "@/lib/url";
 import { newInviteToken, hashInviteToken, invitationEmailHtml, INVITE_TTL_MS } from "@/lib/invitations";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type InviteState = { error?: string; ok?: string };
-
-async function baseUrl(): Promise<string> {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
 
 async function readEmails(formData: FormData): Promise<string[]> {
   const file = formData.get("emailsFile");
@@ -59,7 +52,7 @@ export async function sendInvitations(
     cohortId = cohort.id;
   }
 
-  const url = await baseUrl();
+  const url = await getBaseUrl();
   const cohort = cohortId ? await prisma.cohort.findUnique({ where: { id: cohortId } }) : null;
 
   let sent = 0;

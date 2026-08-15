@@ -1,11 +1,13 @@
 'use client';
-import React, { useState, useActionState } from 'react';
+import React, { useState, useActionState, useTransition } from 'react';
 import Link from 'next/link';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { deleteCohort, bindScenarios, unbindScenario, removeFromCohort } from '@/app/actions/cohorts';
 import { sendInvitations, revokeInvitation } from '@/app/actions/invitations';
+import { createStudent } from '@/app/actions/students';
 import { gradeSubmission, setGradeReleased } from '@/app/actions/grading';
+import { generatePassword } from '@/lib/password-gen';
 import { Textarea } from './scenarios/primitives';
 import { FormStatus } from './settings/parts';
 
@@ -13,7 +15,7 @@ const TYPE_META = { DOJO: { tone: 'brand', label: 'Dojo' }, ASSESSMENT: { tone: 
 
 const TABS = [
   { id: 'members', label: 'Members', icon: <Icon name="Users" size={15} /> },
-  { id: 'invite', label: 'Invite', icon: <Icon name="MailPlus" size={15} /> },
+  { id: 'invite', label: 'Add students', icon: <Icon name="UserPlus" size={15} /> },
   { id: 'scenarios', label: 'Scenarios', icon: <Icon name="Boxes" size={15} /> },
   { id: 'grading', label: 'Grading', icon: <Icon name="GraduationCap" size={15} /> },
   { id: 'standings', label: 'Standings', icon: <Icon name="Trophy" size={15} /> },
@@ -90,6 +92,89 @@ function MembersTab({ cohort, students, onError }) {
   );
 }
 
+/* Create a student account directly in this cohort (no email needed). The
+   instructor sets/generates the password and hands it over — shown once. */
+function ManualAddCard({ cohort, onError }) {
+  const [pwd, setPwd] = useState('');
+  const [creating, startCreate] = useTransition();
+  const [cred, setCred] = useState(null);
+  const formRef = React.useRef(null);
+
+  // Seed a strong password after mount (client-only, so it can't cause an SSR
+  // hydration mismatch on the input's value).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  React.useEffect(() => { setPwd(generatePassword()); }, []);
+
+  const onSubmit = (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    formData.set('cohortId', cohort.id);
+    startCreate(async () => {
+      const res = await createStudent({}, formData);
+      if (res?.error) { onError(res.error); return; }
+      setCred({ email: res.created.email, password: res.created.password, name: res.created.name });
+      form.reset();
+      setPwd(generatePassword());
+    });
+  };
+
+  return (
+    <AC.Card header={<SecHeader icon="UserPlus" title="Add a student directly" subtitle={`Create an account in ${cohort.name} with a password you generate — no email required.`} />}>
+      <form ref={formRef} onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px' }}><AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} /></div>
+          <div style={{ flex: '1 1 200px' }}><AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} /></div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Password</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}><AC.Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} mono placeholder="At least 10 characters" leadingIcon={<Icon name="KeyRound" size={16} />} /></div>
+            <AC.Button type="button" variant="secondary" leadingIcon={<Icon name="RefreshCw" size={14} />} onClick={() => setPwd(generatePassword())}>Generate</AC.Button>
+          </div>
+          <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>Shown once after creating — copy it then. Or type your own.</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="UserPlus" size={14} />}>Create student</AC.Button>
+        </div>
+      </form>
+      <CohortCredentialDialog key={cred ? cred.password : 'none'} cred={cred} onClose={() => setCred(null)} />
+    </AC.Card>
+  );
+}
+
+function CohortCredentialDialog({ cred, onClose }) {
+  const [copied, setCopied] = useState(false);
+  if (!cred) return null;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(`${cred.email}\n${cred.password}`); setCopied(true); } catch { /* clipboard blocked */ }
+  };
+  const field = (label, value) => (
+    <div>
+      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{value}</div>
+    </div>
+  );
+  return (
+    <AC.Dialog
+      open
+      title={`Account created — ${cred.name}`}
+      description="Copy these now — the password is shown only once and can only be reset, not recovered."
+      icon={<Icon name="KeyRound" size={18} />}
+      onClose={onClose}
+      footer={<>
+        <AC.Button variant="secondary" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copy}>{copied ? 'Copied' : 'Copy'}</AC.Button>
+        <AC.Button variant="primary" onClick={onClose}>Done</AC.Button>
+      </>}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
+        {field('Email', cred.email)}
+        {field('Password', cred.password)}
+      </div>
+    </AC.Dialog>
+  );
+}
+
 function InviteTab({ cohort, invitations, onError }) {
   const [state, action, sending] = useActionState(sendInvitations, {});
   const [busyId, setBusyId] = useState(null);
@@ -103,7 +188,9 @@ function InviteTab({ cohort, invitations, onError }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <AC.Card header={<SecHeader icon="MailPlus" title="Invite students" subtitle="Upload a .txt of emails (one per line) or paste them. Each gets an email with a link to set their name + password." />}>
+      <ManualAddCard cohort={cohort} onError={onError} />
+
+      <AC.Card header={<SecHeader icon="MailPlus" title="Invite by email" subtitle="Upload a .txt of emails (one per line) or paste them. Each gets an email with a link to set their name + password. (Requires SMTP in Settings → Mail.)" />}>
         <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <input type="hidden" name="cohortId" value={cohort.id} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
