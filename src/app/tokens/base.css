@@ -18,7 +18,7 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04';
 }
 
-::selection { background: rgba(84, 87, 232, 0.4); color: #fff; }
+::selection { background: rgba(53, 56, 212, 0.18); color: var(--text-primary); }
 
 a { color: var(--text-link); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -26,16 +26,16 @@ a:hover { text-decoration: underline; }
 code, pre, kbd, samp { font-family: var(--font-mono); }
 
 /* ---- Custom scrollbars (SOC console) ---- */
-* { scrollbar-width: thin; scrollbar-color: var(--ink-600) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--gray-300) transparent; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: var(--ink-600);
+  background: var(--gray-300);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover { background: var(--ink-500); background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--gray-400); background-clip: content-box; }
 
 /* ---- Reduced motion ---- */
 @media (prefers-reduced-motion: reduce) {

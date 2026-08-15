@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useActionState } from 'react';
 import { Button as LB, Input as LI } from '@/components/ds';
 import { Icon } from '@/components/Icon';
@@ -12,20 +12,52 @@ import { Icon } from '@/components/Icon';
 export function LoginScreen({ action, turnstile }) {
   const [state, formAction, pending] = useActionState(action, {});
   const turnstileEnabled = Boolean(turnstile?.enabled && turnstile?.siteKey);
+  const boxRef = useRef(null);
+  const widgetId = useRef(null);
 
-  // Load the Turnstile script once when the challenge is enabled. The script
-  // auto-renders any `.cf-turnstile` element and injects a hidden
-  // `cf-turnstile-response` input into the surrounding form.
+  // Render Turnstile *explicitly* rather than relying on the script's one-time
+  // auto-scan of `.cf-turnstile` elements. The auto-scan only fires on the
+  // script's initial load, so after a client-side navigation (e.g. logout →
+  // /login) the already-loaded script never renders the freshly-mounted widget
+  // — which is why it previously needed a hard refresh. Explicit render works
+  // on every mount.
   useEffect(() => {
     if (!turnstileEnabled) return;
-    const SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-    if (document.querySelector(`script[src="${SRC}"]`)) return;
-    const s = document.createElement('script');
-    s.src = SRC;
-    s.async = true;
-    s.defer = true;
-    document.head.appendChild(s);
-  }, [turnstileEnabled]);
+    const SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    let poll;
+
+    const render = () => {
+      if (!boxRef.current || widgetId.current != null) return;
+      if (!window.turnstile) return;
+      widgetId.current = window.turnstile.render(boxRef.current, {
+        sitekey: turnstile.siteKey,
+        theme: 'light',
+      });
+    };
+
+    if (window.turnstile) {
+      render();
+    } else {
+      if (!document.querySelector(`script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]`)) {
+        const s = document.createElement('script');
+        s.src = SRC;
+        s.async = true;
+        s.defer = true;
+        s.onload = render;
+        document.head.appendChild(s);
+      }
+      // Script tag exists but the API may not be ready yet — wait for it.
+      poll = setInterval(() => { if (window.turnstile) { clearInterval(poll); render(); } }, 120);
+    }
+
+    return () => {
+      if (poll) clearInterval(poll);
+      if (widgetId.current != null && window.turnstile) {
+        try { window.turnstile.remove(widgetId.current); } catch { /* already gone */ }
+      }
+      widgetId.current = null;
+    };
+  }, [turnstileEnabled, turnstile?.siteKey]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--surface-app)' }}>
@@ -50,22 +82,22 @@ export function LoginScreen({ action, turnstile }) {
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--blue-200)', letterSpacing: '0.02em' }}>SOC Simulation Lab · Live</span>
           </div>
           <h1 style={{ fontSize: 46, lineHeight: 1.05, fontWeight: 700, letterSpacing: '-0.03em', color: '#fff', margin: '0 0 16px', maxWidth: 520 }}>
-            Train like the alert is <span style={{ color: 'var(--accent)' }}>real.</span>
+            Train like the alert is <span style={{ color: 'var(--highlight-yellow)' }}>real.</span>
           </h1>
-          <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0, maxWidth: 460 }}>
+          <p style={{ fontSize: 16, lineHeight: 1.6, color: 'rgba(255,255,255,0.74)', margin: 0, maxWidth: 460 }}>
             Athena drops you into realistic incident-response scenarios — triage alerts, hunt through logs, isolate endpoints, and write the firewall rule that stops the bleed.
           </p>
           <div style={{ display: 'flex', gap: 28, marginTop: 34 }}>
             {[['Scenarios', '18'], ['Detections', '240+'], ['Avg. session', '52m']].map(([k, v]) => (
               <div key={k}>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 600, color: '#fff' }}>{v}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>{k}</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{k}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ position: 'relative', fontSize: 12, color: 'var(--text-tertiary)' }}>© 2026 Zaio Institute of Technology · For authorized students only</div>
+        <div style={{ position: 'relative', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>© 2026 Zaio Institute of Technology · For authorized students only</div>
       </div>
 
       {/* Form panel */}
@@ -91,9 +123,7 @@ export function LoginScreen({ action, turnstile }) {
               </div>
             </div>
 
-            {turnstileEnabled && (
-              <div className="cf-turnstile" data-sitekey={turnstile.siteKey} data-theme="dark" />
-            )}
+            {turnstileEnabled && <div ref={boxRef} style={{ minHeight: 65 }} />}
 
             {state?.error && (
               <div role="alert" style={{

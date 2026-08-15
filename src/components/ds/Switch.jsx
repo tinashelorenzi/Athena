@@ -7,12 +7,12 @@ const CSS = `
 .ath-switch input{position:absolute;opacity:0;width:0;height:0;}
 .ath-switch__track{
   width:38px;height:22px;flex:none;border-radius:var(--radius-pill);
-  background:var(--ink-700);border:1px solid var(--border-default);position:relative;
+  background:var(--gray-300);border:1px solid var(--border-default);position:relative;
   transition:background var(--dur-base) var(--ease-standard),border-color var(--dur-base) var(--ease-standard);
 }
 .ath-switch__thumb{
   position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
-  background:var(--ink-200);transition:transform var(--dur-base) var(--ease-out),background var(--dur-base);
+  background:#fff;box-shadow:0 1px 2px rgba(16,24,40,0.25);transition:transform var(--dur-base) var(--ease-out),background var(--dur-base);
 }
 .ath-switch input:checked + .ath-switch__track{background:var(--brand);border-color:var(--brand);}
 .ath-switch input:checked + .ath-switch__track .ath-switch__thumb{transform:translateX(16px);background:#fff;}

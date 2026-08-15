@@ -17,7 +17,7 @@ const CSS = `
 .ath-sev--medium .ath-sev__dot{background:var(--sev-medium);}
 .ath-sev--low{color:var(--sev-low);background:var(--sev-low-bg);border-color:var(--sev-low-border);}
 .ath-sev--low .ath-sev__dot{background:var(--sev-low);}
-.ath-sev--info{color:var(--ink-300);background:var(--sev-info-bg);border-color:var(--sev-info-border);}
+.ath-sev--info{color:var(--sev-info);background:var(--sev-info-bg);border-color:var(--sev-info-border);}
 .ath-sev--info .ath-sev__dot{background:var(--sev-info);}
 .ath-sev--solid.ath-sev--critical{background:var(--sev-critical);color:#fff;border-color:transparent;}
 .ath-sev--solid.ath-sev--high{background:var(--sev-high);color:#1a0f00;border-color:transparent;}

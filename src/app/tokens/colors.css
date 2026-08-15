@@ -1,11 +1,14 @@
 /* ============================================================
    ATHENA — Color System
-   Dark-first SOC operations console.
-   Brand: Zaio blue (#2326B8) + yellow (#F9C80E) on deep,
-   blue-tinted near-black surfaces.
+   Light SOC operations console.
+   Brand: Zaio blue (#2326B8) + yellow (#F9C80E) on clean,
+   cool-white surfaces. Semantic tokens below are the light theme;
+   the raw --ink-* / --blue-* / --yellow-* ramps are kept for the
+   few components that reference them directly.
    ============================================================ */
 
 :root {
+  color-scheme: light;
   /* ---- Brand: Blue scale (700 = Zaio brand blue) ---- */
   --blue-950: #0D0E4A;
   --blue-900: #14166E;
@@ -41,92 +44,111 @@
   --ink-100:  #E4E7F5;
   --ink-000:  #F2F4FF;
 
+  /* ---- Neutrals: cool-gray light ramp (0 = white → 950 = ink) ---- */
+  --gray-0:   #FFFFFF;
+  --gray-25:  #FBFCFE;
+  --gray-50:  #F4F6FB; /* app background */
+  --gray-100: #EEF1F8; /* inset / wells / inputs */
+  --gray-150: #E7ECF4;
+  --gray-200: #DDE3EF; /* default border */
+  --gray-300: #C9D1E1;
+  --gray-400: #A7B1C7;
+  --gray-500: #7B869F; /* tertiary text */
+  --gray-600: #566076; /* secondary text */
+  --gray-700: #3B4660;
+  --gray-800: #2A3346;
+  --gray-900: #161D2E; /* primary text */
+  --gray-950: #0B111E;
+
   /* ---- Semantic surfaces ---- */
-  --surface-app:        var(--ink-950);
-  --surface-panel:      var(--ink-900);
-  --surface-card:       var(--ink-800);
-  --surface-raised:     var(--ink-750);
-  --surface-inset:      var(--ink-1000);
-  --surface-hover:      var(--ink-750);
-  --surface-selected:   var(--ink-700);
-  --surface-overlay:    rgba(5, 6, 13, 0.72);
+  --surface-app:        var(--gray-50);
+  --surface-panel:      var(--gray-0);
+  --surface-card:       var(--gray-0);
+  --surface-raised:     var(--gray-0);
+  --surface-inset:      var(--gray-100);
+  --surface-hover:      var(--gray-100);
+  --surface-selected:   var(--brand-subtle-bg);
+  --surface-overlay:    rgba(16, 22, 40, 0.36);
 
   /* ---- Borders ---- */
-  --border-subtle:  #1F2438;
-  --border-default: #2A3049;
-  --border-strong:  #3A4166;
-  --border-focus:   var(--blue-500);
+  --border-subtle:  #EBEFF6;
+  --border-default: #DCE3EF;
+  --border-strong:  #C4CDDD;
+  --border-focus:   var(--blue-600);
 
   /* ---- Text ---- */
-  --text-primary:   var(--ink-000);
-  --text-secondary: var(--ink-300);
-  --text-tertiary:  var(--ink-400);
-  --text-disabled:  var(--ink-500);
-  --text-inverse:   #0A0B14;
-  --text-link:      var(--blue-400);
+  --text-primary:   var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-tertiary:  var(--gray-500);
+  --text-disabled:  var(--gray-400);
+  --text-inverse:   #FFFFFF;
+  --text-link:      var(--blue-700);
   --text-on-brand:  #FFFFFF;
-  --text-on-accent: #1A1400;
+  --text-on-accent: #FFFFFF;
 
-  /* ---- Brand semantic ---- */
+  /* ---- Brand semantic (Zaio blue) ---- */
   --brand:            var(--blue-700);
   --brand-hover:      var(--blue-600);
   --brand-active:     var(--blue-800);
-  --brand-strong:     var(--blue-500);
-  --brand-subtle-bg:  rgba(84, 87, 232, 0.14);
-  --brand-subtle-border: rgba(84, 87, 232, 0.34);
+  --brand-strong:     var(--blue-600);
+  --brand-subtle-bg:  rgba(35, 38, 184, 0.08);
+  --brand-subtle-border: rgba(35, 38, 184, 0.20);
 
-  --accent:           var(--yellow-500);
-  --accent-hover:     var(--yellow-400);
-  --accent-active:    var(--yellow-600);
-  --accent-subtle-bg: rgba(249, 200, 14, 0.14);
-  --accent-subtle-border: rgba(249, 200, 14, 0.40);
+  /* Accent = vivid indigo, so `var(--accent)` highlights read on white.
+     Zaio yellow lives on as --highlight-yellow + warning/medium severity. */
+  --accent:           var(--blue-600);
+  --accent-hover:     var(--blue-500);
+  --accent-active:    var(--blue-700);
+  --accent-subtle-bg: rgba(53, 56, 212, 0.09);
+  --accent-subtle-border: rgba(53, 56, 212, 0.24);
+  --highlight-yellow: var(--yellow-500);
 
-  /* ---- Severity (SOC standard: crit → info) ---- */
-  --sev-critical:     #FF4D5E;
-  --sev-critical-bg:  rgba(255, 77, 94, 0.14);
-  --sev-critical-border: rgba(255, 77, 94, 0.40);
+  /* ---- Severity (SOC standard: crit → info), tuned for light ---- */
+  --sev-critical:     #D92D3C;
+  --sev-critical-bg:  rgba(217, 45, 60, 0.10);
+  --sev-critical-border: rgba(217, 45, 60, 0.30);
 
-  --sev-high:         #FF8A3D;
-  --sev-high-bg:      rgba(255, 138, 61, 0.14);
-  --sev-high-border:  rgba(255, 138, 61, 0.40);
+  --sev-high:         #D9691A;
+  --sev-high-bg:      rgba(217, 105, 26, 0.10);
+  --sev-high-border:  rgba(217, 105, 26, 0.28);
 
-  --sev-medium:       var(--yellow-500);
-  --sev-medium-bg:    rgba(249, 200, 14, 0.14);
-  --sev-medium-border: rgba(249, 200, 14, 0.40);
+  --sev-medium:       #A9770A;
+  --sev-medium-bg:    rgba(249, 200, 14, 0.18);
+  --sev-medium-border: rgba(169, 119, 10, 0.34);
 
-  --sev-low:          var(--blue-400);
-  --sev-low-bg:       rgba(124, 127, 245, 0.16);
-  --sev-low-border:   rgba(124, 127, 245, 0.40);
+  --sev-low:          var(--blue-600);
+  --sev-low-bg:       rgba(53, 56, 212, 0.09);
+  --sev-low-border:   rgba(53, 56, 212, 0.26);
 
-  --sev-info:         var(--ink-400);
-  --sev-info-bg:      rgba(107, 114, 153, 0.16);
-  --sev-info-border:  rgba(107, 114, 153, 0.40);
+  --sev-info:         var(--gray-500);
+  --sev-info-bg:      rgba(123, 134, 159, 0.12);
+  --sev-info-border:  rgba(123, 134, 159, 0.30);
 
   /* ---- Status ---- */
-  --status-success:      #2ED47A;
-  --status-success-bg:   rgba(46, 212, 122, 0.14);
-  --status-success-border: rgba(46, 212, 122, 0.40);
+  --status-success:      #17915A;
+  --status-success-bg:   rgba(23, 145, 90, 0.10);
+  --status-success-border: rgba(23, 145, 90, 0.28);
 
-  --status-warning:      var(--yellow-500);
-  --status-warning-bg:   rgba(249, 200, 14, 0.14);
+  --status-warning:      #A9770A;
+  --status-warning-bg:   rgba(249, 200, 14, 0.18);
 
-  --status-danger:       #FF4D5E;
-  --status-danger-bg:    rgba(255, 77, 94, 0.14);
+  --status-danger:       #D92D3C;
+  --status-danger-bg:    rgba(217, 45, 60, 0.10);
 
-  --status-info:         var(--blue-400);
-  --status-info-bg:      rgba(124, 127, 245, 0.16);
+  --status-info:         var(--blue-600);
+  --status-info-bg:      rgba(53, 56, 212, 0.09);
 
-  --status-neutral:      var(--ink-400);
-  --status-online:       #2ED47A;
-  --status-offline:      var(--ink-500);
-  --status-isolated:     #FF8A3D;
+  --status-neutral:      var(--gray-500);
+  --status-online:       #17915A;
+  --status-offline:      var(--gray-400);
+  --status-isolated:     #D9691A;
 
-  /* ---- Syntax highlighting (KQL / EQL / logs) ---- */
-  --syntax-field:    var(--blue-300);
-  --syntax-operator: #FF8A3D;
-  --syntax-value:    #2ED47A;
-  --syntax-string:   var(--yellow-300);
-  --syntax-keyword:  #FF6FC1;
-  --syntax-comment:  var(--ink-500);
-  --syntax-number:   var(--yellow-400);
+  /* ---- Syntax highlighting (KQL / EQL / logs), light ---- */
+  --syntax-field:    var(--blue-700);
+  --syntax-operator: #C2410C;
+  --syntax-value:    #15803D;
+  --syntax-string:   #B45309;
+  --syntax-keyword:  #A21CAF;
+  --syntax-comment:  var(--gray-400);
+  --syntax-number:   #B45309;
 }

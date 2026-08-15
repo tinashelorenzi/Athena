@@ -11,7 +11,7 @@ const CSS = `
 .ath-badge--sq{border-radius:var(--radius-xs);}
 .ath-badge__dot{width:6px;height:6px;border-radius:50%;flex:none;}
 .ath-badge svg{width:12px;height:12px;}
-.ath-badge--neutral{background:var(--ink-750);color:var(--text-secondary);border-color:var(--border-default);}
+.ath-badge--neutral{background:var(--surface-inset);color:var(--text-secondary);border-color:var(--border-default);}
 .ath-badge--neutral .ath-badge__dot{background:var(--ink-400);}
 .ath-badge--brand{background:var(--brand-subtle-bg);color:var(--blue-300);border-color:var(--brand-subtle-border);}
 .ath-badge--brand .ath-badge__dot{background:var(--brand-strong);}

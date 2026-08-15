@@ -5,24 +5,24 @@
    ============================================================ */
 
 :root {
-  /* ---- Ambient shadows (dark theme = deep + soft) ---- */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.45);
-  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
-  --shadow-xl: 0 28px 70px rgba(0, 0, 0, 0.6);
+  /* ---- Ambient shadows (light theme = soft, cool-gray) ---- */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+  --shadow-md: 0 4px 8px rgba(16, 24, 40, 0.06), 0 8px 20px rgba(16, 24, 40, 0.10);
+  --shadow-lg: 0 12px 24px rgba(16, 24, 40, 0.08), 0 20px 44px rgba(16, 24, 40, 0.12);
+  --shadow-xl: 0 24px 48px rgba(16, 24, 40, 0.12), 0 40px 80px rgba(16, 24, 40, 0.14);
 
   /* ---- Glows (colored, for emphasis / focus) ---- */
-  --glow-brand: 0 0 0 1px rgba(84, 87, 232, 0.5), 0 8px 28px rgba(35, 38, 184, 0.35);
-  --glow-accent: 0 0 24px rgba(249, 200, 14, 0.28);
-  --glow-critical: 0 0 20px rgba(255, 77, 94, 0.30);
+  --glow-brand: 0 0 0 1px rgba(35, 38, 184, 0.28), 0 8px 24px rgba(35, 38, 184, 0.18);
+  --glow-accent: 0 0 0 1px rgba(53, 56, 212, 0.28), 0 8px 24px rgba(53, 56, 212, 0.16);
+  --glow-critical: 0 0 0 1px rgba(217, 45, 60, 0.28), 0 8px 20px rgba(217, 45, 60, 0.16);
 
   /* ---- Focus ring ---- */
   --focus-ring: 0 0 0 2px var(--surface-app), 0 0 0 4px var(--blue-500);
   --focus-ring-inset: inset 0 0 0 1px var(--blue-500);
 
-  /* ---- Hairline top-highlight for raised cards ---- */
-  --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04); /* @kind shadow */
+  /* ---- Hairline top-highlight for raised cards (subtle on light) ---- */
+  --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.6); /* @kind shadow */
 
   /* ---- Motion ---- */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);   /* @kind other */

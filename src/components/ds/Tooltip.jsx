@@ -5,8 +5,8 @@ const CSS = `
 .ath-tt{position:relative;display:inline-flex;}
 .ath-tt__bubble{
   position:absolute;z-index:var(--z-toast);pointer-events:none;
-  background:var(--ink-700);color:var(--text-primary);
-  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--gray-900);color:var(--gray-0);
+  border:1px solid var(--gray-900);border-radius:var(--radius-sm);
   font-size:var(--fs-caption);font-weight:var(--fw-medium);line-height:1.4;
   padding:6px 9px;white-space:nowrap;box-shadow:var(--shadow-md);
   opacity:0;transform:translateY(2px);transition:opacity var(--dur-fast),transform var(--dur-fast);
