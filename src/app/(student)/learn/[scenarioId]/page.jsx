@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, forbidden } from 'next/navigation';
 import { ScenarioWorkspace } from '@/components/screens/student/ScenarioWorkspace';
 import { requireUser } from '@/lib/auth';
 import { getStudentScenario, ensureProgress, publicFlags } from '@/lib/student';
@@ -13,8 +13,11 @@ export default async function ScenarioWorkspacePage({ params }) {
   const user = await requireUser();
   const { scenarioId } = await params;
 
+  // Distinguish a missing scenario (404) from one the student can't access (403).
+  const exists = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { id: true } });
+  if (!exists) notFound();
   const data = await getStudentScenario(user.id, scenarioId);
-  if (!data) notFound();
+  if (!data) forbidden();
 
   const startedAt = await ensureProgress(user.id, scenarioId);
   const { scenario, submission } = data;

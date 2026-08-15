@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect, forbidden } from "next/navigation";
 import { cache } from "react";
 import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
@@ -117,12 +117,12 @@ export async function requireUser(): Promise<SessionUser> {
 }
 
 /**
- * Require a specific role. Redirects unauthenticated users to /login and
- * wrong-role users to their own home (rather than exposing a 403).
+ * Require a specific role. Unauthenticated users are sent to /login; a signed-in
+ * user with the wrong role gets a 403 (forbidden.jsx).
  */
 export async function requireRole(role: Role): Promise<SessionUser> {
   const user = await requireUser();
-  if (user.role !== role) redirect(homeForRole(user.role));
+  if (user.role !== role) forbidden();
   return user;
 }
 
