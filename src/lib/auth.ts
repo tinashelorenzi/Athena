@@ -25,11 +25,13 @@ function hashToken(token: string): string {
 }
 
 /**
- * Whether the session cookie is marked `Secure`. Defaults to on in production,
- * but `SESSION_COOKIE_SECURE=false` forces it off so login works over plain HTTP
- * (e.g. an HTTP staging box). `SESSION_COOKIE_SECURE=true` forces it on.
+ * Whether auth cookies are marked `Secure`. Defaults to on in production, but
+ * `SESSION_COOKIE_SECURE=false` forces it off so login works over plain HTTP
+ * (e.g. an HTTP staging box). `SESSION_COOKIE_SECURE=true` forces it on. Shared
+ * by the session cookie and the Zaio SSO state cookie so both behave the same
+ * behind a plain-HTTP reverse proxy.
  */
-function secureCookieEnabled(): boolean {
+export function secureCookieEnabled(): boolean {
   const flag = process.env.SESSION_COOKIE_SECURE;
   if (flag === "true") return true;
   if (flag === "false") return false;

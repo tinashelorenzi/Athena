@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomBytes, createHash } from "node:crypto";
 import { buildZaioAuthorizeUrl, isZaioSsoEnabled } from "@/lib/zaio-sso";
+import { secureCookieEnabled } from "@/lib/auth";
 
 const STATE_COOKIE = "athena_zaio_sso_state";
 const RETURN_TO_COOKIE = "athena_zaio_sso_return_to";
@@ -31,7 +32,9 @@ export async function GET(request: Request) {
   const cookieOptions = {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    // Match the session cookie so SSO works over plain-HTTP staging
+    // (SESSION_COOKIE_SECURE=false) instead of the browser dropping the cookie.
+    secure: secureCookieEnabled(),
     maxAge: STATE_TTL_SECONDS,
     path: "/api/auth/zaio/callback",
   };
