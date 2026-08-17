@@ -39,6 +39,9 @@ export async function GET(request: Request) {
   cookieStore.set(STATE_COOKIE, hashState(state), cookieOptions);
   if (returnTo) {
     cookieStore.set(RETURN_TO_COOKIE, returnTo, cookieOptions);
+  } else {
+    // Drop any prior dojo returnTo so "Continue with Zaio LMS" lands on /learn.
+    cookieStore.delete({ name: RETURN_TO_COOKIE, path: cookieOptions.path });
   }
 
   return NextResponse.redirect(buildZaioAuthorizeUrl(state));
