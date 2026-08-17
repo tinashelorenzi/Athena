@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { createSession, homeForRole } from "@/lib/auth";
 import { exchangeZaioAuthorizationCode, isZaioSsoEnabled, unusablePasswordHash } from "@/lib/zaio-sso";
+import { getBaseUrl } from "@/lib/url";
 
 const STATE_COOKIE = "athena_zaio_sso_state";
 const RETURN_TO_COOKIE = "athena_zaio_sso_return_to";
@@ -13,8 +14,11 @@ function hashState(state: string): string {
 }
 
 export async function GET(request: Request) {
+  const baseUrl = await getBaseUrl();
+  const redirectTo = (path: string) => NextResponse.redirect(new URL(path, baseUrl));
+
   if (!isZaioSsoEnabled()) {
-    return NextResponse.redirect(new URL("/login?error=sso_disabled", request.url));
+    return redirectTo("/login?error=sso_disabled");
   }
 
   const url = new URL(request.url);
@@ -23,12 +27,10 @@ export async function GET(request: Request) {
   const oauthError = url.searchParams.get("error");
 
   if (oauthError) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(oauthError)}`, request.url),
-    );
+    return redirectTo(`/login?error=${encodeURIComponent(oauthError)}`);
   }
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/login?error=missing_code", request.url));
+    return redirectTo("/login?error=missing_code");
   }
 
   const cookieStore = await cookies();
@@ -38,7 +40,7 @@ export async function GET(request: Request) {
   cookieStore.delete(RETURN_TO_COOKIE);
 
   if (!expectedState || expectedState !== hashState(state)) {
-    return NextResponse.redirect(new URL("/login?error=invalid_state", request.url));
+    return redirectTo("/login?error=invalid_state");
   }
 
   try {
@@ -87,11 +89,9 @@ export async function GET(request: Request) {
         ? returnTo
         : null;
     const destination = safeReturnTo || homeForRole(user.role);
-    return NextResponse.redirect(new URL(destination, request.url));
+    return redirectTo(destination);
   } catch (err) {
     const message = err instanceof Error ? err.message : "sso_failed";
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(message)}`, request.url),
-    );
+    return redirectTo(`/login?error=${encodeURIComponent(message)}`);
   }
 }
