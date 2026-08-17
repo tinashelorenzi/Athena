@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { createSession, homeForRole } from "@/lib/auth";
+import { getBaseUrl } from "@/lib/url";
 import { exchangeZaioAuthorizationCode, isZaioSsoEnabled, unusablePasswordHash } from "@/lib/zaio-sso";
 
 const STATE_COOKIE = "athena_zaio_sso_state";
@@ -13,8 +14,15 @@ function hashState(state: string): string {
 }
 
 export async function GET(request: Request) {
+  // Build redirects from the PUBLIC base URL, not `request.url`. Behind a reverse
+  // proxy `request.url` is the internal address (http://localhost:3000/...), so
+  // using it would bounce the user to localhost after a successful Zaio sign-in.
+  // getBaseUrl() prefers APP_BASE_URL, else X-Forwarded-Host/Proto.
+  const base = await getBaseUrl();
+  const to = (path: string) => NextResponse.redirect(new URL(path, base));
+
   if (!isZaioSsoEnabled()) {
-    return NextResponse.redirect(new URL("/login?error=sso_disabled", request.url));
+    return to("/login?error=sso_disabled");
   }
 
   const url = new URL(request.url);
@@ -23,12 +31,10 @@ export async function GET(request: Request) {
   const oauthError = url.searchParams.get("error");
 
   if (oauthError) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(oauthError)}`, request.url),
-    );
+    return to(`/login?error=${encodeURIComponent(oauthError)}`);
   }
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/login?error=missing_code", request.url));
+    return to("/login?error=missing_code");
   }
 
   const cookieStore = await cookies();
@@ -38,7 +44,7 @@ export async function GET(request: Request) {
   cookieStore.delete(RETURN_TO_COOKIE);
 
   if (!expectedState || expectedState !== hashState(state)) {
-    return NextResponse.redirect(new URL("/login?error=invalid_state", request.url));
+    return to("/login?error=invalid_state");
   }
 
   try {
@@ -87,11 +93,9 @@ export async function GET(request: Request) {
         ? returnTo
         : null;
     const destination = safeReturnTo || homeForRole(user.role);
-    return NextResponse.redirect(new URL(destination, request.url));
+    return to(destination);
   } catch (err) {
     const message = err instanceof Error ? err.message : "sso_failed";
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(message)}`, request.url),
-    );
+    return to(`/login?error=${encodeURIComponent(message)}`);
   }
 }
