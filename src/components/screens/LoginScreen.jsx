@@ -9,7 +9,7 @@ import { Icon } from '@/components/Icon';
    role to the right home (instructor → /admin, student → /alerts). When
    Cloudflare Turnstile is enabled in platform settings, the widget is rendered
    inside the form and its token is verified server-side by the login action. */
-export function LoginScreen({ action, turnstile }) {
+export function LoginScreen({ action, turnstile, zaioSso, ssoError }) {
   const [state, formAction, pending] = useActionState(action, {});
   const turnstileEnabled = Boolean(turnstile?.enabled && turnstile?.siteKey);
   const boxRef = useRef(null);
@@ -135,14 +135,50 @@ export function LoginScreen({ action, turnstile }) {
               </div>
             )}
 
+            {ssoError && !state?.error && (
+              <div role="alert" style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--radius-sm)',
+                background: 'var(--danger-subtle-bg, rgba(239,68,68,0.12))', border: '1px solid var(--danger-subtle-border, rgba(239,68,68,0.35))',
+              }}>
+                <Icon name="TriangleAlert" size={15} style={{ color: 'var(--status-danger, #ef4444)', flex: 'none' }} />
+                <span style={{ fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
+                  {ssoError === 'invalid_state' && 'Zaio sign-in expired. Please try again.'}
+                  {ssoError === 'missing_code' && 'Zaio did not return an authorization code.'}
+                  {ssoError === 'sso_disabled' && 'Zaio sign-in is not configured on this server.'}
+                  {!['invalid_state', 'missing_code', 'sso_disabled'].includes(ssoError) && `Zaio sign-in failed: ${ssoError}`}
+                </span>
+              </div>
+            )}
+
             <LB variant="primary" size="lg" block loading={pending} type="submit">
               {pending ? 'Authenticating' : 'Sign in to Athena'}
             </LB>
           </form>
 
+          {zaioSso?.enabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>or</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
+              </div>
+              <a
+                href={zaioSso.loginUrl}
+                className="ath-btn ath-btn--secondary ath-btn--lg ath-btn--block"
+                style={{ textDecoration: 'none', textAlign: 'center' }}
+              >
+                Continue with Zaio LMS
+              </a>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 24, padding: '11px 13px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-card)', border: '1px solid var(--border-default)' }}>
             <Icon name="Info" size={15} style={{ color: 'var(--text-tertiary)', flex: 'none', marginTop: 1 }} />
-            <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>No public sign-up. Accounts are provisioned by your instructor — contact them for access.</span>
+            <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
+              {zaioSso?.enabled
+                ? 'Instructors: use the email and password issued to you. Students with a Zaio LMS account can use Continue with Zaio LMS above.'
+                : 'No public sign-up. Accounts are provisioned by your instructor — contact them for access.'}
+            </span>
           </div>
         </div>
       </div>

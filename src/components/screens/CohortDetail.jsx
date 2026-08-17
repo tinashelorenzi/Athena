@@ -99,6 +99,7 @@ function ManualAddCard({ cohort, onError }) {
   const [pwd, setPwd] = useState('');
   const [creating, startCreate] = useTransition();
   const [cred, setCred] = useState(null);
+  const [linked, setLinked] = useState(null);
   const formRef = React.useRef(null);
 
   // Seed a strong password after mount (client-only, so it can't cause an SSR
@@ -112,8 +113,15 @@ function ManualAddCard({ cohort, onError }) {
     const formData = new FormData(form);
     formData.set('cohortId', cohort.id);
     startCreate(async () => {
+      setLinked(null);
       const res = await createStudent({}, formData);
       if (res?.error) { onError(res.error); return; }
+      if (res?.linked) {
+        setLinked(res.linked);
+        form.reset();
+        setPwd(generatePassword());
+        return;
+      }
       setCred({ email: res.created.email, password: res.created.password, name: res.created.name });
       form.reset();
       setPwd(generatePassword());
@@ -121,8 +129,14 @@ function ManualAddCard({ cohort, onError }) {
   };
 
   return (
-    <AC.Card header={<SecHeader icon="UserPlus" title="Add a student directly" subtitle={`Create an account in ${cohort.name} with a password you generate — no email required.`} />}>
+    <AC.Card header={<SecHeader icon="UserPlus" title="Add a student directly" subtitle={`Create an account in ${cohort.name}, or link an existing Zaio LMS student by using the same email they use on Zaio.`} />}>
       <form ref={formRef} onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {linked && (
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--success-subtle-bg, rgba(34,197,94,0.12))', border: '1px solid var(--success-subtle-border, rgba(34,197,94,0.35))', fontSize: 13, color: 'var(--status-success, #16a34a)' }}>
+            <Icon name="Check" size={15} />
+            <span><strong>{linked.name}</strong> ({linked.email}) is now in this cohort. They can sign in with <strong>Continue with Zaio LMS</strong>.</span>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 200px' }}><AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} /></div>
           <div style={{ flex: '1 1 200px' }}><AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} /></div>
@@ -133,10 +147,12 @@ function ManualAddCard({ cohort, onError }) {
             <div style={{ flex: 1 }}><AC.Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} mono placeholder="At least 10 characters" leadingIcon={<Icon name="KeyRound" size={16} />} /></div>
             <AC.Button type="button" variant="secondary" leadingIcon={<Icon name="RefreshCw" size={14} />} onClick={() => setPwd(generatePassword())}>Generate</AC.Button>
           </div>
-          <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>Shown once after creating — copy it then. Or type your own.</span>
+          <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>For new accounts only — Zaio LMS students can ignore this and sign in with SSO.</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="UserPlus" size={14} />}>Create student</AC.Button>
+          <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="UserPlus" size={14} />}>
+            {creating ? 'Saving…' : 'Add to cohort'}
+          </AC.Button>
         </div>
       </form>
       <CohortCredentialDialog key={cred ? cred.password : 'none'} cred={cred} onClose={() => setCred(null)} />

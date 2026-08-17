@@ -10,6 +10,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export type CreateStudentState = {
   error?: string;
   created?: { name: string; email: string; password: string };
+  linked?: { name: string; email: string };
 };
 
 /**
@@ -29,9 +30,6 @@ export async function createStudent(
   if (!name) return { error: "Name is required." };
   if (!EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return { error: `An account already exists for ${email}.` };
-
   // Optional cohort: a new name takes precedence, else an existing id.
   const newCohortName = String(formData.get("newCohortName") ?? "").trim();
   let cohortId: string | null = String(formData.get("cohortId") ?? "") || null;
@@ -42,6 +40,35 @@ export async function createStudent(
       create: { name: newCohortName, createdById: admin.id },
     });
     cohortId = cohort.id;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    if (existing.role !== "STUDENT") {
+      return { error: `An account already exists for ${email}.` };
+    }
+    if (!cohortId) {
+      return {
+        error: `An account already exists for ${email}. Open a cohort → Add students to link them.`,
+      };
+    }
+    if (existing.cohortId === cohortId) {
+      return { error: `${email} is already in this cohort.` };
+    }
+
+    const linked = await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        cohortId,
+        name: name || existing.name,
+      },
+    });
+
+    revalidatePath("/admin/students");
+    revalidatePath(`/admin/cohorts/${cohortId}`);
+    revalidatePath("/admin/cohorts");
+    if (existing.cohortId) revalidatePath(`/admin/cohorts/${existing.cohortId}`);
+    return { linked: { name: linked.name, email: linked.email } };
   }
 
   // Use the instructor-provided password if given (e.g. the "Generate" button

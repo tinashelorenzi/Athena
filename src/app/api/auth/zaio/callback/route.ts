@@ -1,0 +1,97 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createHash } from "node:crypto";
+import { prisma } from "@/lib/db";
+import { createSession, homeForRole } from "@/lib/auth";
+import { exchangeZaioAuthorizationCode, isZaioSsoEnabled, unusablePasswordHash } from "@/lib/zaio-sso";
+
+const STATE_COOKIE = "athena_zaio_sso_state";
+const RETURN_TO_COOKIE = "athena_zaio_sso_return_to";
+
+function hashState(state: string): string {
+  return createHash("sha256").update(state).digest("hex");
+}
+
+export async function GET(request: Request) {
+  if (!isZaioSsoEnabled()) {
+    return NextResponse.redirect(new URL("/login?error=sso_disabled", request.url));
+  }
+
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code")?.trim();
+  const state = url.searchParams.get("state")?.trim();
+  const oauthError = url.searchParams.get("error");
+
+  if (oauthError) {
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent(oauthError)}`, request.url),
+    );
+  }
+  if (!code || !state) {
+    return NextResponse.redirect(new URL("/login?error=missing_code", request.url));
+  }
+
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(STATE_COOKIE)?.value;
+  const returnTo = cookieStore.get(RETURN_TO_COOKIE)?.value?.trim();
+  cookieStore.delete(STATE_COOKIE);
+  cookieStore.delete(RETURN_TO_COOKIE);
+
+  if (!expectedState || expectedState !== hashState(state)) {
+    return NextResponse.redirect(new URL("/login?error=invalid_state", request.url));
+  }
+
+  try {
+    const zaioUser = await exchangeZaioAuthorizationCode(code);
+    const email = zaioUser.email.trim().toLowerCase();
+    const name = (zaioUser.name || email).trim();
+    const studentNumber = zaioUser.studentNumber?.trim() || null;
+
+    let user =
+      (await prisma.user.findFirst({
+        where: {
+          OR: [
+            { zaioUserId: zaioUser.id },
+            { email },
+            ...(studentNumber ? [{ studentNumber }] : []),
+          ],
+        },
+      })) ?? null;
+
+    if (user) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          zaioUserId: user.zaioUserId ?? zaioUser.id,
+          name: user.name || name,
+          ...(studentNumber ? { studentNumber } : {}),
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          zaioUserId: zaioUser.id,
+          studentNumber,
+          role: "STUDENT",
+          passwordHash: await unusablePasswordHash(),
+        },
+      });
+    }
+
+    await createSession(user.id);
+
+    const safeReturnTo =
+      returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : null;
+    const destination = safeReturnTo || homeForRole(user.role);
+    return NextResponse.redirect(new URL(destination, request.url));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "sso_failed";
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent(message)}`, request.url),
+    );
+  }
+}

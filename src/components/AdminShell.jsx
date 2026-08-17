@@ -68,7 +68,9 @@ export function AdminShell({ children, user }) {
                 <IconButton label="Preview scenarios" onClick={() => router.push('/admin/scenarios')}><Icon name="FlaskConical" size={16} /></IconButton>
               </Tooltip>
             )}
-            <IconButton label="Sign out" onClick={() => logout()}><Icon name="LogOut" size={16} /></IconButton>
+            <form action={logout} style={{ display: 'inline-flex' }}>
+              <IconButton type="submit" label="Sign out"><Icon name="LogOut" size={16} /></IconButton>
+            </form>
           </div>
         }
       />

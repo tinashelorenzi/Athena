@@ -41,6 +41,11 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   const [cases, setCases] = useState(initialCases || {});
   const [caseAlert, setCaseAlert] = useState(null);
   const [drawer, setDrawer] = useState(null); // 'guide' | 'answers' | null
+  // Lift solved state so Answers / Guide panels keep progress when closed or switched.
+  const [guideSolvedIds, setGuideSolvedIds] = useState(() => solvedIds || []);
+  const [flagSolvedIds, setFlagSolvedIds] = useState(() => solvedFlagIds || []);
+  const markGuideSolved = (id) => setGuideSolvedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  const markFlagSolved = (id) => setFlagSolvedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   const isDojo = scenario.type === 'DOJO';
 
   // Preview mode: an ephemeral, client-side clock (no server actions, no storage).
@@ -202,7 +207,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
             {panel === 'guide' && (
               <div>
                 <PanelTitle icon="GraduationCap" title="Guide" sub="Work through the guide and solve the prompts as you go." />
-                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} preview={preview} />
+                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={guideSolvedIds} onPromptSolved={markGuideSolved} preview={preview} />
               </div>
             )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
@@ -223,7 +228,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
         <Fab
           icon={isDojo ? 'FlagTriangleRight' : 'Send'}
           label={isDojo ? 'Answers' : 'Submit'}
-          badge={isDojo && scenario.flags?.length ? `${(solvedFlagIds || []).length}/${scenario.flags.length}` : null}
+          badge={isDojo && scenario.flags?.length ? `${flagSolvedIds.length}/${scenario.flags.length}` : null}
           active={drawer === 'answers'}
           onClick={() => setDrawer((d) => (d === 'answers' ? null : 'answers'))}
         />
@@ -231,13 +236,13 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
 
       {drawer === 'guide' && scenario.hasGuide && (
         <SlideOver title="Scenario guide" icon="GraduationCap" onClose={() => setDrawer(null)} width={620}>
-          <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={solvedIds} preview={preview} />
+          <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={guideSolvedIds} onPromptSolved={markGuideSolved} preview={preview} />
         </SlideOver>
       )}
       {drawer === 'answers' && (
         <SlideOver title={isDojo ? 'Answers' : 'Submit deliverables'} icon={isDojo ? 'FlagTriangleRight' : 'Send'} onClose={() => setDrawer(null)} width={480}>
           {isDojo
-            ? <FlagChecklist scenario={scenario} scenarioId={scenario.id} solvedFlagIds={solvedFlagIds || []} preview={preview} />
+            ? <FlagChecklist scenario={scenario} scenarioId={scenario.id} solvedFlagIds={flagSolvedIds} onFlagSolved={markFlagSolved} preview={preview} />
             : <SubmitForm scenario={scenario} submission={submission} preview={preview} />}
         </SlideOver>
       )}
@@ -642,23 +647,21 @@ function SlideOver({ title, icon, width = 480, onClose, children }) {
 
 /* Dojo flags, checked one at a time (instant feedback, persisted) — no batch
    submission. Assessment flags are graded by an instructor instead. */
-function FlagChecklist({ scenario, scenarioId, solvedFlagIds, preview }) {
+function FlagChecklist({ scenario, scenarioId, solvedFlagIds, onFlagSolved, preview }) {
   const flags = scenario.flags || [];
-  const solvedInit = useMemo(() => new Set(solvedFlagIds), [solvedFlagIds]);
   if (flags.length === 0) return <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No flags to answer in this scenario.</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>Check each answer as you find it — instant feedback, no submission needed.</div>
       {flags.map((f, i) => (
-        <FlagItem key={f.id} scenarioId={scenarioId} flag={f} index={i} initiallySolved={solvedInit.has(f.id)} preview={preview} />
+        <FlagItem key={f.id} scenarioId={scenarioId} flag={f} index={i} solved={(solvedFlagIds || []).includes(f.id)} onSolved={onFlagSolved} preview={preview} />
       ))}
     </div>
   );
 }
 
-function FlagItem({ scenarioId, flag, index, initiallySolved, preview }) {
+function FlagItem({ scenarioId, flag, index, solved, onSolved, preview }) {
   const [answer, setAnswer] = useState('');
-  const [solved, setSolved] = useState(initiallySolved);
   const [wrong, setWrong] = useState(false);
   const [busy, start] = useTransition();
 
@@ -667,12 +670,12 @@ function FlagItem({ scenarioId, flag, index, initiallySolved, preview }) {
     setWrong(false);
     if (preview) {
       const ok = answer.trim().toLowerCase() === String(flag.answer ?? '').trim().toLowerCase();
-      if (ok) setSolved(true); else setWrong(true);
+      if (ok) onSolved?.(flag.id); else setWrong(true);
       return;
     }
     start(async () => {
       const res = await checkFlag(scenarioId, flag.id, answer);
-      if (res.correct) setSolved(true); else setWrong(true);
+      if (res.correct) onSolved?.(flag.id); else setWrong(true);
     });
   };
 

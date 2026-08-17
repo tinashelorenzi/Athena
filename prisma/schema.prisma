@@ -24,6 +24,10 @@ model User {
   email        String    @unique
   name         String
   passwordHash String
+  /// Linked Zaio LMS Mongo user id when the account signs in via SSO.
+  zaioUserId     String?   @unique
+  /// Zaio LMS student number (institutional ID), synced on SSO login.
+  studentNumber  String?   @unique
   role         Role      @default(STUDENT)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -50,10 +54,12 @@ model User {
 /// A bootcamp cohort — a group of students. Scenarios are released to a whole
 /// cohort by binding them (CohortScenario).
 model Cohort {
-  id          String           @id @default(cuid())
-  name        String           @unique
-  createdById String
-  createdAt   DateTime         @default(now())
+  id             String           @id @default(cuid())
+  name           String           @unique
+  /// Linked Zaio bootcamp Mongo `_id` when provisioned from Zaio LMS.
+  zaioBootcampId String?          @unique
+  createdById    String
+  createdAt      DateTime         @default(now())
   students    User[]
   scenarios   CohortScenario[]
   invitations Invitation[]

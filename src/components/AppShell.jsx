@@ -37,8 +37,6 @@ export function AppShell({ children, user }) {
   const roleLabel = user?.role === 'SUPER_ADMIN' ? 'Instructor · Admin' : 'Tier-1 · Student';
   const isAdmin = user?.role === 'SUPER_ADMIN';
 
-  const onSignOut = () => { logout(); };
-
   const openAlerts = AthenaData.alerts.filter((a) => a.status === 'open').length;
   const items = NAV.map((n) =>
     n.section ? n : {
@@ -72,7 +70,9 @@ export function AppShell({ children, user }) {
                 <IconButton label="Instructor dashboard" onClick={() => router.push('/admin')}><Icon name="LayoutDashboard" size={16} /></IconButton>
               </Tooltip>
             )}
-            <IconButton label="Sign out" onClick={onSignOut}><Icon name="LogOut" size={16} /></IconButton>
+            <form action={logout} style={{ display: 'inline-flex' }}>
+              <IconButton type="submit" label="Sign out"><Icon name="LogOut" size={16} /></IconButton>
+            </form>
           </div>
         }
       />

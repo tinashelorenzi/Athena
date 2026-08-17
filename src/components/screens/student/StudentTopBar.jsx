@@ -27,7 +27,9 @@ export function StudentTopBar({ user, left }) {
         </div>
         <Avatar name={user?.name || 'Student'} size="sm" />
         <Tooltip content="Sign out" placement="bottom">
-          <IconButton label="Sign out" onClick={() => logout()}><Icon name="LogOut" size={16} /></IconButton>
+          <form action={logout} style={{ display: 'inline-flex' }}>
+            <IconButton type="submit" label="Sign out"><Icon name="LogOut" size={16} /></IconButton>
+          </form>
         </Tooltip>
       </div>
     </header>
