@@ -7,6 +7,98 @@ import { hashPassword, generatePassword } from "@/lib/password";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** The auto-password for a bulk-created account: the email with a capital first
+ *  letter (e.g. "ada@zaio.io" → "Ada@zaio.io"). Students change it on first login. */
+function emailPassword(email: string): string {
+  const e = email.trim();
+  return e.charAt(0).toUpperCase() + e.slice(1);
+}
+
+/** A friendly placeholder name from an email local-part ("ada.lovelace" → "Ada Lovelace"). */
+function nameFromEmail(email: string): string {
+  const local = email.split("@")[0] || email;
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ") || email;
+}
+
+export type BulkCreateState = {
+  error?: string;
+  ok?: string;
+  created?: { email: string; password: string }[];
+  skipped?: string[];
+};
+
+/**
+ * Bulk-create STUDENT accounts from a pasted list of emails. Each gets an
+ * email-derived password (capitalised first letter) and is flagged to set their
+ * name (+ optional password) on first login. Existing emails are skipped.
+ */
+export async function bulkCreateStudents(
+  _prevState: BulkCreateState,
+  formData: FormData,
+): Promise<BulkCreateState> {
+  const admin = await requireRole("SUPER_ADMIN");
+
+  const emails = [
+    ...new Set(
+      String(formData.get("emails") ?? "")
+        .split(/[\s,;]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (emails.length === 0) return { error: "Paste at least one email address." };
+  if (emails.length > 500) return { error: "Too many at once — please do 500 or fewer." };
+
+  // Resolve cohort: a new name takes precedence, else an existing id.
+  const newCohortName = String(formData.get("newCohortName") ?? "").trim();
+  let cohortId: string | null = String(formData.get("cohortId") ?? "") || null;
+  if (newCohortName) {
+    const cohort = await prisma.cohort.upsert({
+      where: { name: newCohortName },
+      update: {},
+      create: { name: newCohortName, createdById: admin.id },
+    });
+    cohortId = cohort.id;
+  }
+
+  const created: { email: string; password: string }[] = [];
+  const skipped: string[] = [];
+
+  for (const email of emails) {
+    if (!EMAIL_RE.test(email)) { skipped.push(email); continue; }
+    if (await prisma.user.findUnique({ where: { email } })) { skipped.push(email); continue; }
+
+    const password = emailPassword(email);
+    try {
+      await prisma.user.create({
+        data: {
+          email,
+          name: nameFromEmail(email),
+          passwordHash: await hashPassword(password),
+          role: "STUDENT",
+          cohortId,
+          mustSetName: true,
+        },
+      });
+      created.push({ email, password });
+    } catch {
+      skipped.push(email);
+    }
+  }
+
+  revalidatePath("/admin/students");
+  if (cohortId) revalidatePath(`/admin/cohorts/${cohortId}`);
+  revalidatePath("/admin/cohorts");
+
+  const parts = [`Created ${created.length} account${created.length === 1 ? "" : "s"}`];
+  if (skipped.length) parts.push(`skipped ${skipped.length} (invalid or already exist)`);
+  return { ok: parts.join(" · "), created, skipped };
+}
+
 export type CreateStudentState = {
   error?: string;
   created?: { name: string; email: string; password: string };

@@ -80,6 +80,7 @@ export type SessionUser = {
   name: string;
   role: Role;
   isArchitect: boolean;
+  mustSetName: boolean;
 };
 
 /**
@@ -96,7 +97,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(token) },
     include: {
-      user: { select: { id: true, email: true, name: true, role: true, isArchitect: true } },
+      user: { select: { id: true, email: true, name: true, role: true, isArchitect: true, mustSetName: true } },
     },
   });
   if (!session) return null;

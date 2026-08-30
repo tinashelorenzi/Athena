@@ -46,6 +46,9 @@ export async function login(
 
   await createSession(user.id);
 
+  // Bulk-created accounts finish setup (name + optional password) first.
+  if (user.mustSetName) redirect("/welcome");
+
   // Return the user to where they came from (e.g. a scenario reference link),
   // if it's a safe same-site path; otherwise their role's home. Must be outside
   // any try/catch — redirect() throws NEXT_REDIRECT internally.

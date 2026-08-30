@@ -24,6 +24,9 @@ model User {
   email        String    @unique
   name         String
   passwordHash String
+  /// Set for bulk-created accounts (email-derived password): forces a name (+
+  /// optional new password) setup on first login before entering the app.
+  mustSetName  Boolean   @default(false)
   /// Linked Zaio LMS Mongo user id when the account signs in via SSO.
   zaioUserId     String?   @unique
   /// Zaio LMS student number (institutional ID), synced on SSO login.
