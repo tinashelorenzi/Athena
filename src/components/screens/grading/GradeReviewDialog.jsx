@@ -10,13 +10,17 @@ import { RichTextEditor } from '@/components/RichText';
    cross-cohort grading queue and the per-cohort grading tab. Key this by the
    submission id at the call site so it re-initialises per submission. */
 export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
-  const [grade, setGrade] = useState(submission?.grade != null ? String(submission.grade) : '');
+  // Prefill with the committed grade if graded, else the flag auto-mark. The
+  // instructor validates/overrides before releasing.
+  const initialGrade = submission?.grade != null ? submission.grade : submission?.autoGrade;
+  const [grade, setGrade] = useState(initialGrade != null ? String(initialGrade) : '');
   const [feedback, setFeedback] = useState(submission?.feedback || '');
   const [busy, setBusy] = useState(false);
   if (!submission) return null;
 
   const released = submission.released;
   const graded = submission.status === 'GRADED';
+  const hasAuto = submission.autoGrade != null;
   const finish = () => { onDone?.(); onClose(); };
 
   const commit = async (release) => {
@@ -93,7 +97,18 @@ export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
           </div>
         )}
 
-        <AC.Input label="Grade (0–100)" type="number" min={0} max={100} value={grade} onChange={(e) => setGrade(e.target.value)} leadingIcon={<Icon name="Hash" size={16} />} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <AC.Input label="Grade (0–100)" type="number" min={0} max={100} value={grade} onChange={(e) => setGrade(e.target.value)} leadingIcon={<Icon name="Hash" size={16} />} />
+          {hasAuto && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              <Icon name="Sparkles" size={13} style={{ color: 'var(--accent)' }} />
+              <span>Auto-marked from flags: <strong style={{ color: 'var(--text-secondary)' }}>{submission.autoBasis}</strong> → suggests <strong style={{ color: 'var(--text-secondary)' }}>{submission.autoGrade}/100</strong>.</span>
+              {String(submission.autoGrade) !== grade && (
+                <button type="button" onClick={() => setGrade(String(submission.autoGrade))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-link)', fontSize: 12, fontWeight: 600 }}>Use</button>
+              )}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Feedback {released ? '(updates what the student sees)' : '(shown to the student on release)'}</label>
           <RichTextEditor value={feedback} onChange={setFeedback} />

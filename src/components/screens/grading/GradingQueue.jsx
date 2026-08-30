@@ -86,6 +86,7 @@ export function GradingQueue({ items, stats }) {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>{v}<AC.Badge tone={TYPE_META[row.scenarioType]?.tone || 'neutral'} square>{TYPE_META[row.scenarioType]?.label}</AC.Badge></span>
               ) },
               { key: 'flagsTotal', header: 'Flags', width: '80px', align: 'center', mono: true, render: (_v, row) => (row.flagsTotal ? `${row.flagsCorrect}/${row.flagsTotal}` : '—') },
+              { key: 'autoGrade', header: 'Auto', width: '70px', align: 'center', mono: true, render: (v) => (v == null ? '—' : v) },
               { key: 'submitted', header: 'Submitted', width: '110px', mono: true, render: (v) => v.slice(0, 10) },
               { key: 'status', header: 'State', width: '150px', render: (_v, row) => {
                 const st = stateOf(row);

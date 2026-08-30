@@ -28,6 +28,11 @@ export type QueueItem = {
   flagReview: FlagReview[];
   flagsCorrect: number;
   flagsTotal: number;
+  /** Suggested grade auto-marked from flag correctness (0–100), or null if there
+   *  are no flags to mark. Instructors validate/override before releasing. */
+  autoGrade: number | null;
+  /** Human label for the auto-mark basis, e.g. "8/10 pts" or "3/5 flags". */
+  autoBasis: string;
 };
 
 type FlagDef = { id?: string; question?: string; answer?: string; points?: number };
@@ -49,6 +54,25 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
       const answer = answers[id] ?? "";
       return { question: f?.question ?? "", answer, correct: Boolean(answer) && norm(answer) === norm(f?.answer), points: f?.points || 0 };
     });
+
+    // Auto-mark from flags: prefer weighted points, else fall back to a plain
+    // correct/total count. Null when there are no flags to mark (report-only).
+    const flagsCorrect = flagReview.filter((f) => f.correct).length;
+    const flagsTotal = flagReview.length;
+    const totalPoints = flagReview.reduce((a, f) => a + f.points, 0);
+    const correctPoints = flagReview.filter((f) => f.correct).reduce((a, f) => a + f.points, 0);
+    let autoGrade: number | null = null;
+    let autoBasis = "";
+    if (flagsTotal > 0) {
+      if (totalPoints > 0) {
+        autoGrade = Math.round((correctPoints / totalPoints) * 100);
+        autoBasis = `${correctPoints}/${totalPoints} pts`;
+      } else {
+        autoGrade = Math.round((flagsCorrect / flagsTotal) * 100);
+        autoBasis = `${flagsCorrect}/${flagsTotal} flags`;
+      }
+    }
+
     return {
       id: s.id,
       studentId: s.studentId,
@@ -65,8 +89,10 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
       report: s.report || "",
       reportFileName: s.reportFileName || "",
       flagReview,
-      flagsCorrect: flagReview.filter((f) => f.correct).length,
-      flagsTotal: flagReview.length,
+      flagsCorrect,
+      flagsTotal,
+      autoGrade,
+      autoBasis,
     };
   });
 }
