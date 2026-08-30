@@ -5,6 +5,15 @@ import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { StudentTopBar } from './StudentTopBar';
 import { RichText } from '@/components/RichText';
+import { Tour } from '@/components/Tour';
+
+const DASHBOARD_TOUR = [
+  { selector: '[data-tour="hero"]', title: 'Your analyst profile', body: 'Your rank and reputation live here. Finish graded assessments to earn reputation and climb the levels.' },
+  { selector: '[data-tour="stats"]', title: 'Your progress', body: 'A quick read on what you have in progress, what you’ve completed, and your average grade.' },
+  { selector: '[data-tour="scenarios"]', title: 'Your scenarios', body: 'Everything released to you. Dojos teach you; Assessments are graded. Click a card to enter the lab.' },
+  { selector: '[data-tour="capabilities"]', title: 'Inside the lab', body: 'The tools you’ll use on every case — log search, alert triage, OSQuery, EDR and evidence.' },
+  { selector: '[data-tour="results"]', title: 'Results & feedback', body: 'Once your instructor releases a grade, your score and their feedback show up here.' },
+];
 
 const TYPE_META = { DOJO: { tone: 'brand', label: 'Dojo' }, ASSESSMENT: { tone: 'accent', label: 'Assessment' } };
 const STATUS_META = {
@@ -51,9 +60,9 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
       <StudentTopBar user={user} />
       <main style={{ flex: 1, overflow: 'auto' }}>
         <div style={{ maxWidth: 1040, margin: '0 auto', padding: 28, display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <Hero user={user} standing={standing} rank={rank} />
+          <div data-tour="hero"><Hero user={user} standing={standing} rank={rank} /></div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          <div data-tour="stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <AC.StatCard label="In progress" value={String(stats.inProgress)} icon={<Icon name="Radar" size={16} />} hint="Active investigations" />
             <AC.StatCard label="Completed" value={String(stats.done)} icon={<Icon name="CircleCheck" size={16} />} hint="Scenarios finished" />
             <AC.StatCard label="Graded" value={String(stats.graded)} icon={<Icon name="Award" size={16} />} hint="Assessments returned" />
@@ -64,7 +73,7 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
 
           {isNew && <HowItWorks />}
 
-          <div>
+          <div data-tour="scenarios">
             <SectionTitle icon="Boxes" title="Your scenarios" hint={scenarios.length ? `${scenarios.length} released to your cohort` : undefined} />
             {scenarios.length === 0 ? (
               <Onboarding hasCohort={Boolean(user?.cohort)} />
@@ -93,7 +102,7 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
             )}
           </div>
 
-          <div>
+          <div data-tour="capabilities">
             <SectionTitle icon="Crosshair" title="Inside the lab" hint="The tools you'll use on every case" />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
               {CAPABILITIES.map((c) => (
@@ -110,11 +119,12 @@ export function StudentHome({ user, scenarios, standing, rank, leaderboard, resu
             </div>
           </div>
 
-          {results.length > 0 && <Results results={results} />}
+          {results.length > 0 && <div data-tour="results"><Results results={results} /></div>}
 
           {leaderboard && leaderboard.length > 1 && <Leaderboard rows={leaderboard} meId={user?.id} />}
         </div>
       </main>
+      <Tour steps={DASHBOARD_TOUR} storageKey="athena.tour.dashboard.v1" />
     </div>
   );
 }

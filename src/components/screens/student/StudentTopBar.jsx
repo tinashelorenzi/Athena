@@ -3,6 +3,7 @@ import React from 'react';
 import { IconButton, Avatar, Tooltip } from '@/components/ds';
 import { Icon } from '@/components/Icon';
 import { logout } from '@/app/actions/auth';
+import { startTour } from '@/components/Tour';
 
 /* Slim top bar for the student area: brand, identity, sign out. `left` renders
    custom content (e.g. a back button + scenario title) in the workspace. */
@@ -26,6 +27,9 @@ export function StudentTopBar({ user, left }) {
           {user?.cohort && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{user.cohort}</div>}
         </div>
         <Avatar name={user?.name || 'Student'} size="sm" />
+        <Tooltip content="Walkthrough" placement="bottom">
+          <IconButton label="Walkthrough" onClick={startTour}><Icon name="Compass" size={16} /></IconButton>
+        </Tooltip>
         <Tooltip content="Sign out" placement="bottom">
           <form action={logout} style={{ display: 'inline-flex' }}>
             <IconButton type="submit" label="Sign out"><Icon name="LogOut" size={16} /></IconButton>

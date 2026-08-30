@@ -17,6 +17,20 @@ const OSQueryPanel = dynamic(() => import('./OSQueryPanel').then((m) => m.OSQuer
 import { submitScenario } from '@/app/actions/submissions';
 import { checkFlag } from '@/app/actions/flags';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
+import { Tour } from '@/components/Tour';
+
+const SCENARIO_TOUR = [
+  { selector: '[data-tour="run"]', title: 'Start the scenario', body: 'Press Run to start the clock — alerts and logs stream in over time, just like a real shift. Dojos can be paused; assessments run to the end. Your elapsed time shows here.' },
+  { selector: '[data-tour="panel-guide"]', title: 'Guide', body: 'A step-by-step teaching walkthrough with checkpoints you solve as you go. (Dojo scenarios.)' },
+  { selector: '[data-tour="panel-brief"]', title: 'Briefing', body: 'The incident brief and your objectives — start here to understand what you’re investigating.' },
+  { selector: '[data-tour="panel-alerts"]', title: 'Alerts', body: 'The alert queue. Triage each one: set a verdict (true / false positive), add notes, and capture IOCs.' },
+  { selector: '[data-tour="panel-logs"]', title: 'Logs', body: 'Search raw event logs with KQL and a live timeline, like Kibana Discover. Your main hunting ground.' },
+  { selector: '[data-tour="panel-osquery"]', title: 'OSQuery', body: 'Run real SQL against endpoint tables (processes, connections, and more) to answer precise questions.' },
+  { selector: '[data-tour="panel-endpoints"]', title: 'EDR', body: 'Endpoint detection & response: process trees, network connections, and browser / shell history.' },
+  { selector: '[data-tour="panel-artifacts"]', title: 'Artifacts', body: 'Download evidence files attached to the scenario for deeper analysis.' },
+  { selector: '[data-tour="fab-answers"]', title: 'Answers & submit', body: 'Open from any panel. In a Dojo you check flags for instant feedback; in an Assessment you write and submit your report for grading.' },
+  { selector: '[data-tour="fab-guide"]', title: 'Guide, anywhere', body: 'Pop the guide open from any panel without losing your place.' },
+];
 
 // The Guide and Answers surfaces are always-available FABs (right side), so a
 // student can reference them from any investigation panel.
@@ -172,7 +186,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
       <StudentTopBar user={user} left={left} />
 
       {/* run control bar */}
-      <div style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
+      <div data-tour="run" style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
         <RunControls run={run} canPause={canPause} realtime={scenario.realtime} busy={busy} onRun={doRun} onPause={doPause} onResume={doResume} onComplete={doComplete} />
         {preview && <AC.Badge tone="accent" square>Preview</AC.Badge>}
         <div style={{ flex: 1 }} />
@@ -189,7 +203,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
           {PANELS.map((p) => {
             const active = panel === p.id;
             return (
-              <button key={p.id} onClick={() => setPanel(p.id)} style={{
+              <button key={p.id} data-tour={`panel-${p.id}`} onClick={() => setPanel(p.id)} style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
                 background: active ? 'var(--accent-subtle-bg, rgba(124,140,255,0.12))' : 'transparent',
                 border: '1px solid ' + (active ? 'var(--accent-subtle-border, rgba(124,140,255,0.3))' : 'transparent'),
@@ -223,9 +237,10 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
       {/* Floating access to the guide + answers from any panel */}
       <div style={{ position: 'fixed', right: 20, bottom: 20, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 40 }}>
         {scenario.hasGuide && (
-          <Fab icon="GraduationCap" label="Guide" active={drawer === 'guide'} onClick={() => setDrawer((d) => (d === 'guide' ? null : 'guide'))} />
+          <Fab dataTour="fab-guide" icon="GraduationCap" label="Guide" active={drawer === 'guide'} onClick={() => setDrawer((d) => (d === 'guide' ? null : 'guide'))} />
         )}
         <Fab
+          dataTour="fab-answers"
           icon={isDojo ? 'FlagTriangleRight' : 'Send'}
           label={isDojo ? 'Answers' : 'Submit'}
           badge={isDojo && scenario.flags?.length ? `${flagSolvedIds.length}/${scenario.flags.length}` : null}
@@ -257,6 +272,8 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
         onError={setErr}
         onSaved={(alertId, data) => setCases((c) => ({ ...c, [alertId]: data }))}
       />
+
+      {!preview && <Tour steps={SCENARIO_TOUR} storageKey="athena.tour.scenario.v1" />}
     </div>
   );
 }
@@ -609,9 +626,9 @@ function SubmitForm({ scenario, submission, preview }) {
   );
 }
 
-function Fab({ icon, label, active, badge, onClick }) {
+function Fab({ icon, label, active, badge, onClick, dataTour }) {
   return (
-    <button onClick={onClick} title={label} style={{
+    <button onClick={onClick} title={label} data-tour={dataTour} style={{
       display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, cursor: 'pointer',
       background: active ? 'var(--accent, #7c8cff)' : 'var(--surface-raised)',
       border: '1px solid ' + (active ? 'var(--accent, #7c8cff)' : 'var(--border-default)'),
