@@ -19,14 +19,35 @@ export type StudentScenarioCard = {
 
 export async function getStudentScenarios(userId: string): Promise<StudentScenarioCard[]> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { cohortId: true } });
-  if (!user?.cohortId) return [];
 
-  const bindings = await prisma.cohortScenario.findMany({
-    where: { cohortId: user.cohortId },
-    include: { scenario: { select: { id: true, title: true, type: true, description: true } } },
-    orderBy: { releasedAt: "desc" },
-  });
-  const scenarioIds = bindings.map((b) => b.scenario.id);
+  const cardSelect = { id: true, title: true, type: true, description: true } as const;
+
+  // A student sees: PUBLIC scenarios (everyone, no binding needed) + the
+  // restricted (ROLLOUT) scenarios bound to their cohort. `hidden` scenarios are
+  // link-only and stay out of the listing.
+  const [bindings, publicScenarios] = await Promise.all([
+    user?.cohortId
+      ? prisma.cohortScenario.findMany({
+          where: { cohortId: user.cohortId },
+          include: { scenario: { select: cardSelect } },
+          orderBy: { releasedAt: "desc" },
+        })
+      : Promise.resolve([]),
+    prisma.scenario.findMany({
+      where: { exposure: "PUBLIC", hidden: false },
+      select: cardSelect,
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+
+  // Merge unique (cohort-bound first, then public not already listed).
+  const scenarioMap = new Map<string, { id: string; title: string; type: string; description: string }>();
+  for (const b of bindings) scenarioMap.set(b.scenario.id, b.scenario);
+  for (const s of publicScenarios) if (!scenarioMap.has(s.id)) scenarioMap.set(s.id, s);
+
+  const scenarios = [...scenarioMap.values()];
+  if (scenarios.length === 0) return [];
+  const scenarioIds = scenarios.map((s) => s.id);
 
   const [progress, submissions, runs] = await Promise.all([
     prisma.scenarioProgress.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true } }),
@@ -37,21 +58,21 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   const subMap = new Map(submissions.map((s) => [s.scenarioId, s]));
   const runMap = new Map(runs.map((r) => [r.scenarioId, r.status]));
 
-  return bindings.map((b) => {
-    const sub = subMap.get(b.scenario.id);
-    const runStatus = runMap.get(b.scenario.id);
+  return scenarios.map((sc) => {
+    const sub = subMap.get(sc.id);
+    const runStatus = runMap.get(sc.id);
     // A grade stays hidden (shows as "Submitted") until the instructor releases it.
     const released = Boolean(sub && sub.status === "GRADED" && sub.releasedAt != null);
     let status: StudentScenarioStatus;
     if (sub) status = released ? "GRADED" : "SUBMITTED";
     else if (runStatus === "COMPLETED") status = "COMPLETED";
-    else if (runStatus || started.has(b.scenario.id)) status = "IN_PROGRESS";
+    else if (runStatus || started.has(sc.id)) status = "IN_PROGRESS";
     else status = "NOT_STARTED";
     return {
-      id: b.scenario.id,
-      title: b.scenario.title,
-      type: b.scenario.type as "DOJO" | "ASSESSMENT",
-      description: b.scenario.description,
+      id: sc.id,
+      title: sc.title,
+      type: sc.type as "DOJO" | "ASSESSMENT",
+      description: sc.description,
       status,
       grade: released ? sub?.grade ?? null : null,
     };
