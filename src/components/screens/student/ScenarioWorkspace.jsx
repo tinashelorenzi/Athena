@@ -549,9 +549,11 @@ function SubmitForm({ scenario, submission, preview }) {
   const fileRef = useRef(null);
   const existingFile = submission?.reportFileName && !file && !removeFile ? submission.reportFileName : null;
   const clearFile = () => { if (fileRef.current) fileRef.current.value = ''; setFile(null); };
+  // Assessments are one-shot: once submitted the form locks to a read-only recap.
+  const locked = scenario.type === 'ASSESSMENT' && Boolean(submission);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>Answer the flags and (if required) write or upload your report. Your instructor grades and then releases the result.</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>{locked ? 'You’ve submitted this assessment. It’s locked and awaiting your instructor’s grade — assessments can’t be re-submitted.' : 'Answer the flags and (if required) write or upload your report. Your instructor grades and then releases the result.'}</div>
       {submission?.status === 'GRADED' && (
         <AC.Card accent>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -564,9 +566,34 @@ function SubmitForm({ scenario, submission, preview }) {
         </AC.Card>
       )}
       {submission && submission.status !== 'GRADED' && (
-        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name="Clock" size={15} /> Submitted — awaiting grading. You can re-submit to update your answers.</div></AC.Card>
+        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name="Clock" size={15} /> Submitted — awaiting grading.{locked ? '' : ' You can re-submit to update your answers.'}</div></AC.Card>
       )}
 
+      {locked ? (
+        <>
+          {scenario.flags.length > 0 && (
+            <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Flag" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Your flag answers</span></div>}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {scenario.flags.map((f, i) => (
+                  <div key={f.id}>
+                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{i + 1}. {f.question}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{answers[f.id] || '— no answer —'}</div>
+                  </div>
+                ))}
+              </div>
+            </AC.Card>
+          )}
+          <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="FileText" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Your report</span></div>}>
+            {submission.report ? (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{submission.report}</div>
+            ) : submission.reportFileName ? (
+              <a href={`/api/submissions/${submission.id}/report`} style={{ textDecoration: 'none', fontSize: 12.5, color: 'var(--text-link)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="FileText" size={14} /> {submission.reportFileName}</a>
+            ) : (
+              <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No report submitted.</span>
+            )}
+          </AC.Card>
+        </>
+      ) : (
       <form action={preview ? undefined : action} onSubmit={preview ? (e) => e.preventDefault() : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {scenario.flags.length > 0 && (
           <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Flag" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Flags</span></div>}>
@@ -622,6 +649,7 @@ function SubmitForm({ scenario, submission, preview }) {
           <AC.Button type="submit" variant="primary" disabled={preview} loading={saving} leadingIcon={<Icon name="Send" size={14} />}>{preview ? 'Preview — not submitted' : submission ? 'Re-submit' : 'Submit deliverables'}</AC.Button>
         </div>
       </form>
+      )}
     </div>
   );
 }

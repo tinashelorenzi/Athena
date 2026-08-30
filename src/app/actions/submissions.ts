@@ -44,6 +44,12 @@ export async function submitScenario(
     select: { reportFileKey: true },
   });
 
+  // Assessments are one-shot: once submitted, they can't be re-submitted or
+  // changed (non-assessment exercises may re-submit).
+  if (scenario.type === "ASSESSMENT" && existing) {
+    return { error: "This assessment has already been submitted — it can't be changed." };
+  }
+
   // Collect an answer per flag from fields named `flag:<id>`.
   const flags = publicFlags(scenario.flags);
   const flagAnswers: Record<string, string> = {};
