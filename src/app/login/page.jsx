@@ -6,13 +6,16 @@ import { getZaioSsoPublicConfig } from '@/lib/zaio-sso';
 import { login } from '@/app/actions/auth';
 
 export default async function LoginPage({ searchParams }) {
-  // Already signed in? Skip the form and go to the role's home.
+  const params = await searchParams;
+  const rawReturn = typeof params?.returnTo === 'string' ? params.returnTo : '';
+  const returnTo = rawReturn.startsWith('/') && !rawReturn.startsWith('//') ? rawReturn : '';
+
+  // Already signed in? Skip the form and go where they were headed (or home).
   const user = await getCurrentUser();
-  if (user) redirect(homeForRole(user.role));
+  if (user) redirect(returnTo || homeForRole(user.role));
 
   const turnstile = await getTurnstilePublic();
   const zaioSso = getZaioSsoPublicConfig();
-  const params = await searchParams;
   const ssoError = typeof params?.error === 'string' ? params.error : undefined;
 
   return (
@@ -21,6 +24,7 @@ export default async function LoginPage({ searchParams }) {
       turnstile={turnstile}
       zaioSso={zaioSso}
       ssoError={ssoError}
+      returnTo={returnTo}
     />
   );
 }

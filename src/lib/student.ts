@@ -60,19 +60,22 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
 
 /** Load a scenario for a student, or null if they aren't authorized for it. */
 export async function getStudentScenario(userId: string, scenarioId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { cohortId: true } });
-  if (!user?.cohortId) return null;
-
-  const binding = await prisma.cohortScenario.findUnique({
-    where: { cohortId_scenarioId: { cohortId: user.cohortId, scenarioId } },
-  });
-  if (!binding) return null;
-
   const scenario = await prisma.scenario.findUnique({
     where: { id: scenarioId },
     include: { endpoints: { orderBy: { hostname: "asc" } } },
   });
   if (!scenario) return null;
+
+  // PUBLIC scenarios are open to any authenticated student; others require the
+  // student's cohort to be bound to the scenario.
+  if (scenario.exposure !== "PUBLIC") {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { cohortId: true } });
+    if (!user?.cohortId) return null;
+    const binding = await prisma.cohortScenario.findUnique({
+      where: { cohortId_scenarioId: { cohortId: user.cohortId, scenarioId } },
+    });
+    if (!binding) return null;
+  }
 
   const [submission, progress] = await Promise.all([
     prisma.submission.findUnique({ where: { scenarioId_studentId: { scenarioId, studentId: userId } } }),
@@ -82,8 +85,12 @@ export async function getStudentScenario(userId: string, scenarioId: string) {
   return { scenario, submission, progress };
 }
 
-/** Whether the student may submit deliverables for a scenario. */
+/** Whether the student may access/submit a scenario (PUBLIC, or cohort-bound). */
 export async function isAuthorizedForScenario(userId: string, scenarioId: string): Promise<boolean> {
+  const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { exposure: true } });
+  if (!scenario) return false;
+  if (scenario.exposure === "PUBLIC") return true;
+
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { cohortId: true } });
   if (!user?.cohortId) return false;
   const binding = await prisma.cohortScenario.findUnique({

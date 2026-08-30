@@ -45,8 +45,13 @@ export async function login(
   }
 
   await createSession(user.id);
-  // Must be outside any try/catch — redirect() throws NEXT_REDIRECT internally.
-  redirect(homeForRole(user.role));
+
+  // Return the user to where they came from (e.g. a scenario reference link),
+  // if it's a safe same-site path; otherwise their role's home. Must be outside
+  // any try/catch — redirect() throws NEXT_REDIRECT internally.
+  const returnTo = String(formData.get("returnTo") ?? "").trim();
+  const safe = returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
+  redirect(safe || homeForRole(user.role));
 }
 
 /** Logout Server Action: revoke the session and return to the login page. */

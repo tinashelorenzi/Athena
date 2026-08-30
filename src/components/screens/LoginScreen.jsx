@@ -9,7 +9,10 @@ import { Icon } from '@/components/Icon';
    role to the right home (instructor → /admin, student → /alerts). When
    Cloudflare Turnstile is enabled in platform settings, the widget is rendered
    inside the form and its token is verified server-side by the login action. */
-export function LoginScreen({ action, turnstile, zaioSso, ssoError }) {
+export function LoginScreen({ action, turnstile, zaioSso, ssoError, returnTo }) {
+  const zaioLoginHref = zaioSso?.loginUrl
+    ? (returnTo ? `${zaioSso.loginUrl}?returnTo=${encodeURIComponent(returnTo)}` : zaioSso.loginUrl)
+    : undefined;
   const [state, formAction, pending] = useActionState(action, {});
   const turnstileEnabled = Boolean(turnstile?.enabled && turnstile?.siteKey);
   const boxRef = useRef(null);
@@ -115,6 +118,7 @@ export function LoginScreen({ action, turnstile, zaioSso, ssoError }) {
           <p style={{ fontSize: 14, color: 'var(--text-tertiary)', margin: '0 0 24px' }}>Use the credentials issued by your instructor.</p>
 
           <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
             <LI label="Email" name="email" type="email" autoComplete="username" placeholder="you@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} />
             <div>
               <LI label="Password" name="password" type="password" autoComplete="current-password" placeholder="Your password" required leadingIcon={<Icon name="Lock" size={16} />} />
@@ -163,7 +167,7 @@ export function LoginScreen({ action, turnstile, zaioSso, ssoError }) {
                 <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} />
               </div>
               <a
-                href={zaioSso.loginUrl}
+                href={zaioLoginHref}
                 className="ath-btn ath-btn--secondary ath-btn--lg ath-btn--block"
                 style={{ textDecoration: 'none', textAlign: 'center' }}
               >
