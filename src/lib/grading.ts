@@ -22,6 +22,7 @@ export type QueueItem = {
   status: "SUBMITTED" | "GRADED";
   grade: number | null;
   released: boolean;
+  committed: boolean;
   feedback: string;
   report: string;
   reportFileName: string;
@@ -85,6 +86,7 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
       status: s.status,
       grade: s.grade,
       released: s.releasedAt != null,
+      committed: s.committedAt != null,
       feedback: s.feedback || "",
       report: s.report || "",
       reportFileName: s.reportFileName || "",

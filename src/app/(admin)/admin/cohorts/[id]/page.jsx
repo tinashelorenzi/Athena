@@ -54,6 +54,7 @@ export default async function CohortDetailPage({ params }) {
           submitted: s.submittedAt.toISOString().slice(0, 10),
           status: s.status, grade: s.grade, feedback: s.feedback || '',
           released: s.releasedAt != null,
+          committed: s.committedAt != null,
           report: s.report || '',
           reportFileName: s.reportFileName || '',
           flagReview: flags.map((f) => ({

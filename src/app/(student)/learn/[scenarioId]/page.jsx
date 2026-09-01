@@ -78,6 +78,7 @@ export default async function ScenarioWorkspacePage({ params }) {
         report: submission.report || '',
         reportFileName: submission.reportFileName || '',
         flagAnswers: submission.flagAnswers || {},
+        committed: submission.committedAt != null,
         status: released ? 'GRADED' : 'SUBMITTED',
         grade: released ? submission.grade : null,
         feedback: released ? (submission.feedback || '') : '',

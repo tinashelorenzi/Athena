@@ -21,7 +21,7 @@ export async function gradeSubmission(
 
   const submission = await prisma.submission.findUnique({
     where: { id: submissionId },
-    select: { id: true, releasedAt: true, student: { select: { cohortId: true } } },
+    select: { id: true, releasedAt: true, committedAt: true, student: { select: { cohortId: true } } },
   });
   if (!submission) return { error: "Submission not found." };
 
@@ -38,9 +38,41 @@ export async function gradeSubmission(
       status: "GRADED",
       gradedById: admin.id,
       gradedAt: new Date(),
+      // Grading locks the submission: commit it if it wasn't already.
+      ...(submission.committedAt ? {} : { committedAt: new Date(), committedById: admin.id }),
       // Release now if asked; otherwise keep whatever release state it had.
       ...(release ? { releasedAt: new Date() } : {}),
     },
+  });
+
+  if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);
+  return { ok: true };
+}
+
+/**
+ * Commit (lock) a submission for grading, or re-open it so the student can
+ * re-do. A released submission can't be re-opened without un-releasing first.
+ */
+export async function setSubmissionCommitted(
+  submissionId: string,
+  committed: boolean,
+): Promise<GradeResult> {
+  const admin = await requireRole("SUPER_ADMIN");
+
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, releasedAt: true, student: { select: { cohortId: true } } },
+  });
+  if (!submission) return { error: "Submission not found." };
+  if (!committed && submission.releasedAt) {
+    return { error: "Un-release the grade before re-opening the submission." };
+  }
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: committed
+      ? { committedAt: new Date(), committedById: admin.id }
+      : { committedAt: null, committedById: null },
   });
 
   if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);

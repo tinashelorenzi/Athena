@@ -41,13 +41,13 @@ export async function submitScenario(
 
   const existing = await prisma.submission.findUnique({
     where: { scenarioId_studentId: { scenarioId, studentId: user.id } },
-    select: { reportFileKey: true },
+    select: { reportFileKey: true, committedAt: true },
   });
 
-  // Assessments are one-shot: once submitted, they can't be re-submitted or
-  // changed (non-assessment exercises may re-submit).
-  if (scenario.type === "ASSESSMENT" && existing) {
-    return { error: "This assessment has already been submitted — it can't be changed." };
+  // A student may re-submit (re-do) freely until the instructor commits the
+  // submission for grading, which locks it.
+  if (existing?.committedAt) {
+    return { error: "Your instructor has committed this submission for grading — it can no longer be changed." };
   }
 
   // Collect an answer per flag from fields named `flag:<id>`.

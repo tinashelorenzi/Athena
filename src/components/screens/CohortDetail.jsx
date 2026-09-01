@@ -355,13 +355,15 @@ function GradingTab({ submissions, onError }) {
               { key: 'submitted', header: 'Submitted', mono: true, width: '120px' },
               { key: 'status', header: 'Status', width: '160px', render: (v, row) => (
                 v !== 'GRADED'
-                  ? <AC.Badge tone="accent" dot square>Submitted</AC.Badge>
+                  ? (row.committed
+                    ? <AC.Badge tone="warning" dot square>To grade</AC.Badge>
+                    : <AC.Badge tone="neutral" dot square>Open</AC.Badge>)
                   : row.released
                     ? <AC.Badge tone="success" dot square>Released · {row.grade ?? '—'}</AC.Badge>
-                    : <AC.Badge tone="warning" dot square>Graded · {row.grade ?? '—'} · held</AC.Badge>
+                    : <AC.Badge tone="accent" dot square>Held · {row.grade ?? '—'}</AC.Badge>
               ) },
               { key: 'id', header: '', align: 'right', width: '100px', render: (_v, row) => (
-                <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PenLine" size={14} />} onClick={() => setGrading(row)}>{row.status === 'GRADED' ? 'Review' : 'Grade'}</AC.Button>
+                <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PenLine" size={14} />} onClick={() => setGrading(row)}>{row.status === 'GRADED' ? 'Review' : row.committed ? 'Grade' : 'Review'}</AC.Button>
               ) },
             ]}
             rows={submissions}

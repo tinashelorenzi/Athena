@@ -3,21 +3,31 @@ import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
+import { setSubmissionCommitted } from '@/app/actions/grading';
 import { GradeReviewDialog } from './GradeReviewDialog';
 
 const TYPE_META = { DOJO: { tone: 'brand', label: 'Dojo' }, ASSESSMENT: { tone: 'accent', label: 'Assessment' } };
 
+/* Lifecycle: open (student can re-do) → committed (locked, to grade) →
+   held (graded, not released) → released. */
 function stateOf(row) {
-  if (row.status !== 'GRADED') return 'needs';
-  return row.released ? 'released' : 'held';
+  if (row.status === 'GRADED') return row.released ? 'released' : 'held';
+  return row.committed ? 'committed' : 'open';
 }
 
-export function GradingQueue({ items, stats }) {
+export function GradingQueue({ items }) {
   const router = useRouter();
-  const [tab, setTab] = useState('needs');
+  const counts = useMemo(() => {
+    const c = { open: 0, committed: 0, held: 0, released: 0 };
+    for (const i of items) c[stateOf(i)] += 1;
+    return { ...c, all: items.length };
+  }, [items]);
+
+  const [tab, setTab] = useState(() => (counts.committed ? 'committed' : counts.open ? 'open' : 'all'));
   const [q, setQ] = useState('');
   const [cohort, setCohort] = useState('');
   const [reviewing, setReviewing] = useState(null);
+  const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
 
   const cohorts = useMemo(() => [...new Set(items.map((i) => i.cohortName))].sort(), [items]);
@@ -32,26 +42,36 @@ export function GradingQueue({ items, stats }) {
     });
   }, [items, tab, q, cohort]);
 
+  const commit = async (row) => {
+    setBusyId(row.id);
+    const res = await setSubmissionCommitted(row.id, true);
+    setBusyId(null);
+    if (res?.error) { setError(res.error); return; }
+    router.refresh();
+  };
+
   const TABS = [
-    { id: 'needs', label: 'Needs grading', icon: <Icon name="Inbox" size={15} />, n: stats.needsGrading },
-    { id: 'held', label: 'Held', icon: <Icon name="EyeOff" size={15} />, n: stats.held },
-    { id: 'released', label: 'Released', icon: <Icon name="CircleCheck" size={15} />, n: stats.released },
-    { id: 'all', label: 'All', icon: <Icon name="List" size={15} />, n: stats.total },
+    { id: 'open', label: 'Open', icon: <Icon name="PencilLine" size={15} />, n: counts.open },
+    { id: 'committed', label: 'To grade', icon: <Icon name="Inbox" size={15} />, n: counts.committed },
+    { id: 'held', label: 'Held', icon: <Icon name="EyeOff" size={15} />, n: counts.held },
+    { id: 'released', label: 'Released', icon: <Icon name="CircleCheck" size={15} />, n: counts.released },
+    { id: 'all', label: 'All', icon: <Icon name="List" size={15} />, n: counts.all },
   ];
 
   return (
     <div style={{ padding: 24, maxWidth: 1120, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>Grading queue</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Review submissions from every cohort, grade or amend, then release to students.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>Students can keep re-doing an assessment until you <strong style={{ color: 'var(--text-secondary)' }}>commit</strong> it. Committing locks it for grading; then grade, amend, and release.</p>
       </div>
 
       {error && <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <AC.StatCard label="Needs grading" value={String(stats.needsGrading)} tone={stats.needsGrading ? 'warning' : 'default'} icon={<Icon name="Inbox" size={16} />} hint="Awaiting a grade" />
-        <AC.StatCard label="Held" value={String(stats.held)} tone={stats.held ? 'accent' : 'default'} icon={<Icon name="EyeOff" size={16} />} hint="Graded, not released" />
-        <AC.StatCard label="Released" value={String(stats.released)} icon={<Icon name="CircleCheck" size={16} />} hint="Visible to students" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
+        <AC.StatCard label="Open" value={String(counts.open)} tone={counts.open ? 'accent' : 'default'} icon={<Icon name="PencilLine" size={16} />} hint="Student can still re-do" />
+        <AC.StatCard label="To grade" value={String(counts.committed)} tone={counts.committed ? 'warning' : 'default'} icon={<Icon name="Inbox" size={16} />} hint="Committed, awaiting a grade" />
+        <AC.StatCard label="Held" value={String(counts.held)} icon={<Icon name="EyeOff" size={16} />} hint="Graded, not released" />
+        <AC.StatCard label="Released" value={String(counts.released)} icon={<Icon name="CircleCheck" size={16} />} hint="Visible to students" />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -72,7 +92,7 @@ export function GradingQueue({ items, stats }) {
       <AC.Card padded={false}>
         {filtered.length === 0 ? (
           <div style={{ padding: 8 }}>
-            <AC.EmptyState icon={<Icon name="Inbox" size={22} />} title="Nothing here" description={tab === 'needs' ? 'No submissions are waiting to be graded.' : tab === 'held' ? 'No graded submissions are being held.' : 'No submissions match.'} />
+            <AC.EmptyState icon={<Icon name="Inbox" size={22} />} title="Nothing here" description={tab === 'open' ? 'No submissions are open for re-do.' : tab === 'committed' ? 'No committed submissions are waiting to be graded.' : tab === 'held' ? 'No graded submissions are being held.' : 'No submissions match.'} />
           </div>
         ) : (
           <AC.Table
@@ -88,15 +108,20 @@ export function GradingQueue({ items, stats }) {
               { key: 'flagsTotal', header: 'Flags', width: '80px', align: 'center', mono: true, render: (_v, row) => (row.flagsTotal ? `${row.flagsCorrect}/${row.flagsTotal}` : '—') },
               { key: 'autoGrade', header: 'Auto', width: '70px', align: 'center', mono: true, render: (v) => (v == null ? '—' : v) },
               { key: 'submitted', header: 'Submitted', width: '110px', mono: true, render: (v) => v.slice(0, 10) },
-              { key: 'status', header: 'State', width: '150px', render: (_v, row) => {
+              { key: 'status', header: 'State', width: '140px', render: (_v, row) => {
                 const st = stateOf(row);
-                if (st === 'needs') return <AC.Badge tone="warning" dot square>Needs grading</AC.Badge>;
+                if (st === 'open') return <AC.Badge tone="neutral" dot square>Open</AC.Badge>;
+                if (st === 'committed') return <AC.Badge tone="warning" dot square>To grade</AC.Badge>;
                 if (st === 'held') return <AC.Badge tone="accent" dot square>Held · {row.grade ?? '—'}</AC.Badge>;
                 return <AC.Badge tone="success" dot square>Released · {row.grade ?? '—'}</AC.Badge>;
               } },
-              { key: 'id', header: '', align: 'right', width: '100px', render: (_v, row) => (
-                <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PenLine" size={14} />} onClick={(e) => { e.stopPropagation(); setReviewing(row); }}>{row.status === 'GRADED' ? 'Review' : 'Grade'}</AC.Button>
-              ) },
+              { key: 'id', header: '', align: 'right', width: '120px', render: (_v, row) => {
+                const st = stateOf(row);
+                if (st === 'open') {
+                  return <AC.Button variant="primary" size="sm" loading={busyId === row.id} leadingIcon={<Icon name="Lock" size={13} />} onClick={(e) => { e.stopPropagation(); commit(row); }}>Commit</AC.Button>;
+                }
+                return <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PenLine" size={14} />} onClick={(e) => { e.stopPropagation(); setReviewing(row); }}>{st === 'committed' ? 'Grade' : 'Review'}</AC.Button>;
+              } },
             ]}
             rows={filtered}
           />

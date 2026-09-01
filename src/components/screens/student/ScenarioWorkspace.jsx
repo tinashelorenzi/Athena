@@ -549,11 +549,12 @@ function SubmitForm({ scenario, submission, preview }) {
   const fileRef = useRef(null);
   const existingFile = submission?.reportFileName && !file && !removeFile ? submission.reportFileName : null;
   const clearFile = () => { if (fileRef.current) fileRef.current.value = ''; setFile(null); };
-  // Assessments are one-shot: once submitted the form locks to a read-only recap.
-  const locked = scenario.type === 'ASSESSMENT' && Boolean(submission);
+  // A student may re-do an assessment until the instructor commits it for
+  // grading; after that the form locks to a read-only recap.
+  const locked = scenario.type === 'ASSESSMENT' && Boolean(submission?.committed);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>{locked ? 'You’ve submitted this assessment. It’s locked and awaiting your instructor’s grade — assessments can’t be re-submitted.' : 'Answer the flags and (if required) write or upload your report. Your instructor grades and then releases the result.'}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>{locked ? 'Your instructor has committed this for grading — it’s locked and awaiting your result.' : 'Answer the flags and (if required) write or upload your report. You can keep updating it until your instructor commits it for grading.'}</div>
       {submission?.status === 'GRADED' && (
         <AC.Card accent>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -566,7 +567,7 @@ function SubmitForm({ scenario, submission, preview }) {
         </AC.Card>
       )}
       {submission && submission.status !== 'GRADED' && (
-        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name="Clock" size={15} /> Submitted — awaiting grading.{locked ? '' : ' You can re-submit to update your answers.'}</div></AC.Card>
+        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name={locked ? 'Lock' : 'Clock'} size={15} /> {locked ? 'Committed for grading — awaiting your result.' : 'Submitted — you can keep updating it until your instructor commits it for grading.'}</div></AC.Card>
       )}
 
       {locked ? (

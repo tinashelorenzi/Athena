@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import * as AC from '@/components/ds';
 import { Icon } from '@/components/Icon';
-import { gradeSubmission, setGradeReleased } from '@/app/actions/grading';
+import { gradeSubmission, setGradeReleased, setSubmissionCommitted } from '@/app/actions/grading';
 import { RichTextEditor } from '@/components/RichText';
 
 /* Review a student's submission: see flag correctness + report, set/amend a
@@ -20,10 +20,11 @@ export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
 
   const released = submission.released;
   const graded = submission.status === 'GRADED';
+  const committed = submission.committed;
   const hasAuto = submission.autoGrade != null;
   const finish = () => { onDone?.(); onClose(); };
 
-  const commit = async (release) => {
+  const save = async (release) => {
     setBusy(true);
     const res = await gradeSubmission(submission.id, Number(grade), feedback, release);
     setBusy(false);
@@ -33,6 +34,13 @@ export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
   const toggleRelease = async (next) => {
     setBusy(true);
     const res = await setGradeReleased(submission.id, next);
+    setBusy(false);
+    if (res?.error) { onError?.(res.error); return; }
+    finish();
+  };
+  const setCommitted = async (next) => {
+    setBusy(true);
+    const res = await setSubmissionCommitted(submission.id, next);
     setBusy(false);
     if (res?.error) { onError?.(res.error); return; }
     finish();
@@ -48,14 +56,24 @@ export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
       onClose={onClose}
       footer={<>
         <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
+        {!committed && (
+          <AC.Button variant="secondary" loading={busy} leadingIcon={<Icon name="Lock" size={14} />} onClick={() => setCommitted(true)}>Commit for grading</AC.Button>
+        )}
+        {committed && !released && (
+          <AC.Button variant="ghost" loading={busy} leadingIcon={<Icon name="LockOpen" size={14} />} onClick={() => setCommitted(false)}>Re-open</AC.Button>
+        )}
         {graded && released && (
           <AC.Button variant="secondary" loading={busy} leadingIcon={<Icon name="EyeOff" size={14} />} onClick={() => toggleRelease(false)}>Hold</AC.Button>
         )}
-        <AC.Button variant="secondary" loading={busy} onClick={() => commit(false)}>Save (hold)</AC.Button>
-        <AC.Button variant="primary" loading={busy} leadingIcon={<Icon name="Send" size={14} />} onClick={() => commit(true)}>{released ? 'Save & keep released' : 'Save & release'}</AC.Button>
+        <AC.Button variant="secondary" loading={busy} onClick={() => save(false)}>Save (hold)</AC.Button>
+        <AC.Button variant="primary" loading={busy} leadingIcon={<Icon name="Send" size={14} />} onClick={() => save(true)}>{released ? 'Save & keep released' : 'Save & release'}</AC.Button>
       </>}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: committed ? 'var(--text-tertiary)' : 'var(--status-warning, #a9770a)' }}>
+          <Icon name={committed ? 'Lock' : 'PencilLine'} size={14} />
+          {committed ? 'Committed — locked for grading; the student can’t change it.' : 'Open — the student can still re-do this. Grading or “Commit for grading” locks it.'}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-tertiary)' }}>
           <Icon name={released ? 'Eye' : 'EyeOff'} size={14} />
           {released ? 'Released — the student can see this grade.' : graded ? 'Graded but held — the student cannot see it yet.' : 'Not graded yet — the student sees “awaiting grading”.'}

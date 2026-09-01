@@ -127,6 +127,11 @@ model Submission {
   /// Set when the instructor releases the committed grade to the student. The
   /// grade/feedback stay hidden from the student until this is non-null.
   releasedAt  DateTime?
+  /// Set when an instructor commits the submission for grading — it locks the
+  /// submission so the student can no longer re-submit/change it. Until then a
+  /// student may re-do an assessment freely.
+  committedAt   DateTime?
+  committedById String?
   submittedAt DateTime         @default(now())
 
   @@unique([scenarioId, studentId])
