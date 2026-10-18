@@ -1,29 +1,28 @@
 'use client';
 import React from 'react';
+import { Form, Input, theme } from 'antd';
 
 /* Small shared authoring primitives, extracted so both ScenarioFields and
    JsonField can use them without a circular import. */
 
-export function Field({ label, hint, children }) {
+/* Labelled field (antd Form.Item layout only — the child keeps its own `name`
+   and posts natively with the surrounding <form>). */
+export function Field({ label, hint, required, children }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {label && <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</label>}
+    <Form.Item label={label} extra={hint} required={required}>
       {children}
-      {hint && <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>{hint}</span>}
-    </div>
+    </Form.Item>
   );
 }
 
-export function Textarea({ mono, rows = 4, ...rest }) {
+/* antd TextArea; `mono` switches to the code font (JSON / markdown). */
+export function Textarea({ mono, rows = 4, style, ...rest }) {
+  const { token } = theme.useToken();
   return (
-    <textarea
+    <Input.TextArea
       rows={rows}
       spellCheck={false}
-      style={{
-        width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)',
-        fontFamily: mono ? 'var(--font-mono)' : 'var(--font-sans)', fontSize: 13, lineHeight: 1.5,
-      }}
+      style={{ ...(mono ? { fontFamily: token.fontFamilyCode, fontSize: 12.5 } : null), ...style }}
       {...rest}
     />
   );

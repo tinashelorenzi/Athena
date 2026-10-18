@@ -2,14 +2,22 @@
 import React, { useState, useMemo, useEffect, useRef, useActionState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import {
+  Layout, Menu, Button, Tag, Badge, Card, Table, Typography, Flex, Space, Segmented, Input, Alert, Empty, Spin,
+  Drawer, FloatButton, Tooltip, Popconfirm, Progress, Tabs, Tree, Descriptions, theme,
+} from 'antd';
+import {
+  ArrowLeftOutlined, ReadOutlined, FileTextOutlined, AlertOutlined, FileSearchOutlined, CodeOutlined, DesktopOutlined,
+  PaperClipOutlined, CaretRightOutlined, PauseOutlined, FlagOutlined, ClockCircleOutlined, ThunderboltOutlined,
+  CheckCircleFilled, CheckOutlined, SendOutlined, AimOutlined, DownloadOutlined, FileZipOutlined, UploadOutlined,
+  DeleteOutlined, LockOutlined, TrophyOutlined, EditOutlined, AuditOutlined, CloseOutlined, FileDoneOutlined,
+} from '@ant-design/icons';
 import { Markdown } from '@/components/Markdown';
 import { RichText } from '@/components/RichText';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
-import { AlertCaseDialog } from './AlertCaseDialog';
-import { LogsPanel } from './LogsPanel';
+import { AlertCaseDialog, VERDICTS } from './AlertCaseDialog';
+import { LogsPanel, PanelHeader, NotRunningCard } from './LogsPanel';
 import { feedAtClient } from './previewFeed';
 
 // alasql (used by OSQueryPanel) only bundles for the browser, so load it client-only.
@@ -18,6 +26,8 @@ import { submitScenario } from '@/app/actions/submissions';
 import { checkFlag } from '@/app/actions/flags';
 import { startRun, pauseRun, resumeRun, completeRun } from '@/app/actions/runs';
 import { Tour } from '@/components/Tour';
+
+const { Text, Paragraph } = Typography;
 
 const SCENARIO_TOUR = [
   { selector: '[data-tour="run"]', title: 'Start the scenario', body: 'Press Run to start the clock — alerts and logs stream in over time, just like a real shift. Dojos can be paused; assessments run to the end. Your elapsed time shows here.' },
@@ -32,22 +42,30 @@ const SCENARIO_TOUR = [
   { selector: '[data-tour="fab-guide"]', title: 'Guide, anywhere', body: 'Pop the guide open from any panel without losing your place.' },
 ];
 
-// The Guide and Answers surfaces are always-available FABs (right side), so a
+// The Guide and Answers surfaces are always-available FABs (bottom right), so a
 // student can reference them from any investigation panel.
 const BASE_PANELS = [
-  { id: 'brief', label: 'Brief', icon: 'BookOpen' },
-  { id: 'alerts', label: 'Alerts', icon: 'Bell' },
-  { id: 'logs', label: 'Logs', icon: 'ScrollText' },
-  { id: 'osquery', label: 'OSQuery', icon: 'TerminalSquare' },
-  { id: 'endpoints', label: 'EDR', icon: 'MonitorSmartphone' },
-  { id: 'artifacts', label: 'Artifacts', icon: 'Paperclip' },
+  { id: 'brief', label: 'Brief', icon: <FileTextOutlined /> },
+  { id: 'alerts', label: 'Alerts', icon: <AlertOutlined /> },
+  { id: 'logs', label: 'Logs', icon: <FileSearchOutlined /> },
+  { id: 'osquery', label: 'OSQuery', icon: <CodeOutlined /> },
+  { id: 'endpoints', label: 'EDR', icon: <DesktopOutlined /> },
+  { id: 'artifacts', label: 'Artifacts', icon: <PaperClipOutlined /> },
 ];
+const GUIDE_PANEL = { id: 'guide', label: 'Guide', icon: <ReadOutlined /> };
 
+const TYPE_TAG = { DOJO: { color: 'cyan', label: 'Dojo' }, ASSESSMENT: { color: 'purple', label: 'Assessment' } };
+const VERDICT_META = Object.fromEntries(VERDICTS.map((v) => [v.id, v]));
+
+// Wall clock for the preview-mode run timer (event handlers only).
+const wallNow = () => Date.now();
 const fmtClock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`;
+const fmt = (v) => (v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 
 export function ScenarioWorkspace({ user, scenario, submission, initialRun, solvedIds, solvedFlagIds, initialCases, preview = false }) {
   const router = useRouter();
-  const PANELS = scenario.hasGuide ? [{ id: 'guide', label: 'Guide', icon: 'GraduationCap' }, ...BASE_PANELS] : BASE_PANELS;
+  const { token } = theme.useToken();
+  const PANELS = scenario.hasGuide ? [GUIDE_PANEL, ...BASE_PANELS] : BASE_PANELS;
   const [panel, setPanel] = useState(scenario.hasGuide ? 'guide' : 'brief');
   const [run, setRun] = useState(initialRun);
   const [err, setErr] = useState(null);
@@ -99,7 +117,7 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
       socket.onerror = () => { try { socket.close(); } catch { /* ignore */ } };
     };
     connect();
-    return () => { closed = true; clearTimeout(retry); try { socket && socket.close(); } catch { /* ignore */ } };
+    return () => { closed = true; clearTimeout(retry); try { socket?.close(); } catch { /* ignore */ } };
   }, [scenario.id, hasRun, preview]);
 
   // Poll fallback while running. Skips a tick only when the socket delivered a
@@ -142,21 +160,21 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
   // Run controls — server actions normally; local clock in preview.
   const doRun = () => {
     if (!preview) return act(startRun);
-    accumRef.current = 0; startRef.current = Date.now();
+    accumRef.current = 0; startRef.current = wallNow();
     setRun((r) => ({ ...r, status: 'RUNNING', elapsed: 0, ...feedAtClient(scenario.rawAlerts, scenario.rawLogs, 0) }));
   };
   const doPause = () => {
     if (!preview) return act(pauseRun);
-    const e = Math.floor(accumRef.current + (Date.now() - startRef.current) / 1000);
+    const e = Math.floor(accumRef.current + (wallNow() - startRef.current) / 1000);
     accumRef.current = e; setRun((r) => ({ ...r, status: 'PAUSED', elapsed: e }));
   };
   const doResume = () => {
     if (!preview) return act(resumeRun);
-    startRef.current = Date.now(); setRun((r) => ({ ...r, status: 'RUNNING' }));
+    startRef.current = wallNow(); setRun((r) => ({ ...r, status: 'RUNNING' }));
   };
   const doComplete = () => {
     if (!preview) return act(completeRun);
-    const e = Math.floor(accumRef.current + (run.status === 'RUNNING' ? (Date.now() - startRef.current) / 1000 : 0));
+    const e = Math.floor(accumRef.current + (run.status === 'RUNNING' ? (wallNow() - startRef.current) / 1000 : 0));
     accumRef.current = e; setRun((r) => ({ ...r, status: 'COMPLETED', elapsed: e }));
   };
 
@@ -173,94 +191,151 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
     });
   };
 
+  // Alert queue rows (stable ids) + triage progress.
+  const alerts = useMemo(() => (run.alerts || []).map((a, i) => ({ ...a, id: a.id ?? `a${i}` })), [run.alerts]);
+  const triaged = alerts.filter((a) => cases[a.id]?.verdict).length;
+  const untriaged = alerts.length - triaged;
+
+  const typeTag = TYPE_TAG[scenario.type] || TYPE_TAG.DOJO;
   const left = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-      <AC.IconButton label="Back" onClick={() => router.push(preview ? `/admin/scenarios/${scenario.id}` : '/learn')}><Icon name="ArrowLeft" size={18} /></AC.IconButton>
-      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>{scenario.title}</span>
-      <AC.Badge tone={scenario.type === 'ASSESSMENT' ? 'accent' : 'brand'} square>{scenario.type === 'ASSESSMENT' ? 'Assessment' : 'Dojo'}</AC.Badge>
-    </div>
+    <Flex align="center" gap={10} style={{ minWidth: 0 }}>
+      <Tooltip title={preview ? 'Back to scenario' : 'Back to dashboard'}>
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => router.push(preview ? `/admin/scenarios/${scenario.id}` : '/learn')} />
+      </Tooltip>
+      <Text strong ellipsis style={{ fontSize: 15, maxWidth: 360 }}>{scenario.title}</Text>
+      <Tag color={typeTag.color} style={{ marginInlineEnd: 0 }}>{typeTag.label}</Tag>
+      {preview && <Tag color="gold">Preview</Tag>}
+    </Flex>
   );
 
+  const menuItems = PANELS.map((p) => ({
+    key: p.id,
+    icon: p.icon,
+    'data-tour': `panel-${p.id}`,
+    label: p.id === 'alerts' && alerts.length > 0 ? (
+      <Flex align="center" justify="space-between" gap={8}>
+        <span>{p.label}</span>
+        <Tooltip title={untriaged ? `${untriaged} untriaged of ${alerts.length}` : `All ${alerts.length} triaged`} placement="right">
+          <Badge count={untriaged || alerts.length} color={untriaged ? token.colorError : token.colorTextQuaternary} size="small" />
+        </Tooltip>
+      </Flex>
+    ) : p.label,
+  }));
+
+  const guide = (
+    <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={guideSolvedIds} onPromptSolved={markGuideSolved} preview={preview} />
+  );
+  const flagsTotal = scenario.flags?.length || 0;
+
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--surface-app)' }}>
+    <Layout style={{ height: '100vh' }}>
       <StudentTopBar user={user} left={left} />
 
       {/* run control bar */}
-      <div data-tour="run" style={{ height: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 12, padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
+      <Flex
+        data-tour="run"
+        align="center"
+        gap={12}
+        wrap
+        style={{ minHeight: 48, flex: 'none', padding: '6px 20px', background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
+      >
         <RunControls run={run} canPause={canPause} realtime={scenario.realtime} busy={busy} onRun={doRun} onPause={doPause} onResume={doResume} onComplete={doComplete} />
-        {preview && <AC.Badge tone="accent" square>Preview</AC.Badge>}
+        {scenario.realtime && <Tag icon={<ThunderboltOutlined />} color="red">Real-time · runs continuously</Tag>}
+        {err && <Alert type="error" showIcon title={err} style={{ padding: '2px 10px' }} closable={{ onClose: () => setErr(null) }} />}
         <div style={{ flex: 1 }} />
-        {scenario.realtime && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--status-danger, #ef4444)' }}>
-            <Icon name="Radio" size={14} /> Real-time — runs continuously, no pausing
-          </span>
+        {hasRun && alerts.length > 0 && (
+          <Tooltip title="Alerts with a verdict">
+            <Flex align="center" gap={8} style={{ cursor: 'pointer' }} onClick={() => setPanel('alerts')}>
+              <Text type="secondary" style={{ fontSize: 12 }}>Triaged</Text>
+              <Progress percent={Math.round((triaged / alerts.length) * 100)} size={[120, 6]} showInfo={false} />
+              <Text style={{ fontSize: 12, fontFamily: token.fontFamilyCode }}>{triaged}/{alerts.length}</Text>
+            </Flex>
+          </Tooltip>
         )}
-        {err && <span style={{ fontSize: 12.5, color: 'var(--status-danger, #ef4444)' }}>{err}</span>}
-      </div>
+        {isDojo && flagsTotal > 0 && (
+          <Tooltip title="Flags solved">
+            <Flex align="center" gap={8} style={{ cursor: 'pointer' }} onClick={() => setDrawer('answers')}>
+              <FlagOutlined style={{ color: token.colorTextTertiary }} />
+              <Text style={{ fontSize: 12, fontFamily: token.fontFamilyCode }}>{flagSolvedIds.length}/{flagsTotal}</Text>
+            </Flex>
+          </Tooltip>
+        )}
+      </Flex>
 
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <nav style={{ width: 176, flex: 'none', borderRight: '1px solid var(--border-subtle)', background: 'var(--surface-panel)', padding: 10, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {PANELS.map((p) => {
-            const active = panel === p.id;
-            return (
-              <button key={p.id} data-tour={`panel-${p.id}`} onClick={() => setPanel(p.id)} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
-                background: active ? 'var(--accent-subtle-bg, rgba(124,140,255,0.12))' : 'transparent',
-                border: '1px solid ' + (active ? 'var(--accent-subtle-border, rgba(124,140,255,0.3))' : 'transparent'),
-                color: active ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: 13, fontWeight: active ? 600 : 500, textAlign: 'left',
-              }}>
-                <Icon name={p.icon} size={16} /> {p.label}
-                {p.id === 'alerts' && run.alerts?.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>{run.alerts.length}</span>}
-              </button>
-            );
-          })}
-        </nav>
+      <Layout hasSider style={{ flex: 1, minHeight: 0 }}>
+        <Layout.Sider width={196} style={{ borderRight: `1px solid ${token.colorBorderSecondary}`, overflow: 'auto' }}>
+          <Menu
+            mode="inline"
+            selectedKeys={[panel]}
+            onClick={({ key }) => setPanel(key)}
+            items={[{ type: 'group', key: 'g', label: 'Investigate', children: menuItems }]}
+            style={{ borderInlineEnd: 0, padding: '8px 4px' }}
+          />
+        </Layout.Sider>
 
-        <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
-          <div style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
+        <Layout.Content style={{ overflow: 'auto', minWidth: 0 }}>
+          <div style={{ maxWidth: 1120, margin: '0 auto', padding: 24 }}>
             {panel === 'guide' && (
               <div>
-                <PanelTitle icon="GraduationCap" title="Guide" sub="Work through the guide and solve the prompts as you go." />
-                <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={guideSolvedIds} onPromptSolved={markGuideSolved} preview={preview} />
+                <PanelHeader icon={<ReadOutlined />} title="Guide" sub="Work through the guide and solve the checkpoints as you go." />
+                <Card>{guide}</Card>
               </div>
             )}
             {panel === 'brief' && <BriefPanel scenario={scenario} />}
-            {panel === 'alerts' && <FeedPanel kind="alerts" run={run} cases={cases} onOpenCase={setCaseAlert} />}
+            {panel === 'alerts' && <AlertsPanel run={run} alerts={alerts} cases={cases} onOpenCase={setCaseAlert} />}
             {panel === 'logs' && <LogsPanel run={run} />}
             {panel === 'osquery' && <OSQueryPanel endpoints={scenario.endpoints} />}
             {panel === 'endpoints' && <EndpointsPanel endpoints={scenario.endpoints} />}
             {panel === 'artifacts' && <ArtifactsPanel endpoints={scenario.endpoints} />}
           </div>
-        </main>
-      </div>
+        </Layout.Content>
+      </Layout>
 
       {/* Floating access to the guide + answers from any panel */}
-      <div style={{ position: 'fixed', right: 20, bottom: 20, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 40 }}>
+      <FloatButton.Group shape="square" style={{ insetInlineEnd: 24, insetBlockEnd: 24 }}>
         {scenario.hasGuide && (
-          <Fab dataTour="fab-guide" icon="GraduationCap" label="Guide" active={drawer === 'guide'} onClick={() => setDrawer((d) => (d === 'guide' ? null : 'guide'))} />
+          <FloatButton
+            data-tour="fab-guide"
+            icon={<ReadOutlined />}
+            content="Guide"
+            tooltip={{ title: 'Open the guide', placement: 'left' }}
+            type={drawer === 'guide' ? 'primary' : 'default'}
+            onClick={() => setDrawer((d) => (d === 'guide' ? null : 'guide'))}
+          />
         )}
-        <Fab
-          dataTour="fab-answers"
-          icon={isDojo ? 'FlagTriangleRight' : 'Send'}
-          label={isDojo ? 'Answers' : 'Submit'}
-          badge={isDojo && scenario.flags?.length ? `${flagSolvedIds.length}/${scenario.flags.length}` : null}
-          active={drawer === 'answers'}
+        <FloatButton
+          data-tour="fab-answers"
+          icon={isDojo ? <FlagOutlined /> : <SendOutlined />}
+          content={isDojo ? 'Answers' : 'Submit'}
+          tooltip={{ title: isDojo ? 'Check your flag answers' : 'Submit your deliverables', placement: 'left' }}
+          type="primary"
+          badge={isDojo && flagsTotal ? { count: `${flagSolvedIds.length}/${flagsTotal}`, color: flagSolvedIds.length === flagsTotal ? token.colorSuccess : token.colorTextSecondary } : undefined}
           onClick={() => setDrawer((d) => (d === 'answers' ? null : 'answers'))}
         />
-      </div>
+      </FloatButton.Group>
 
-      {drawer === 'guide' && scenario.hasGuide && (
-        <SlideOver title="Scenario guide" icon="GraduationCap" onClose={() => setDrawer(null)} width={620}>
-          <GuideView scenarioId={scenario.id} markdown={scenario.guide} prompts={scenario.guidePrompts} solvedIds={guideSolvedIds} onPromptSolved={markGuideSolved} preview={preview} />
-        </SlideOver>
+      {scenario.hasGuide && (
+        <Drawer
+          open={drawer === 'guide'}
+          onClose={() => setDrawer(null)}
+          size={620}
+          destroyOnHidden
+          title={<Space><ReadOutlined />Scenario guide</Space>}
+        >
+          {guide}
+        </Drawer>
       )}
-      {drawer === 'answers' && (
-        <SlideOver title={isDojo ? 'Answers' : 'Submit deliverables'} icon={isDojo ? 'FlagTriangleRight' : 'Send'} onClose={() => setDrawer(null)} width={480}>
-          {isDojo
-            ? <FlagChecklist scenario={scenario} scenarioId={scenario.id} solvedFlagIds={flagSolvedIds} onFlagSolved={markFlagSolved} preview={preview} />
-            : <SubmitForm scenario={scenario} submission={submission} preview={preview} />}
-        </SlideOver>
-      )}
+      <Drawer
+        open={drawer === 'answers'}
+        onClose={() => setDrawer(null)}
+        size={500}
+        destroyOnHidden
+        title={<Space>{isDojo ? <FlagOutlined /> : <SendOutlined />}{isDojo ? 'Answers' : 'Submit deliverables'}</Space>}
+      >
+        {isDojo
+          ? <FlagChecklist scenario={scenario} scenarioId={scenario.id} solvedFlagIds={flagSolvedIds} onFlagSolved={markFlagSolved} preview={preview} />
+          : <SubmitForm scenario={scenario} submission={submission} preview={preview} />}
+      </Drawer>
 
       <AlertCaseDialog
         key={caseAlert ? caseAlert.id : 'none'}
@@ -274,274 +349,296 @@ export function ScenarioWorkspace({ user, scenario, submission, initialRun, solv
       />
 
       {!preview && <Tour steps={SCENARIO_TOUR} storageKey="athena.tour.scenario.v1" />}
-    </div>
+    </Layout>
   );
 }
 
 function RunControls({ run, canPause, realtime, busy, onRun, onPause, onResume, onComplete }) {
+  const { token } = theme.useToken();
   const status = run.status;
   const noPauseNote = realtime ? 'Real-time · no pausing' : 'Assessment · runs to the end';
+  const finish = (
+    <Popconfirm title="Finish this scenario?" description="The clock stops and no further alerts will fire." okText="Finish" onConfirm={onComplete}>
+      <Button size="small" icon={<FlagOutlined />} loading={busy}>Finish</Button>
+    </Popconfirm>
+  );
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      {status === 'NONE' && <AC.Button variant="primary" size="sm" loading={busy} leadingIcon={<Icon name="Play" size={14} />} onClick={onRun}>Run scenario</AC.Button>}
+    <Flex align="center" gap={12}>
+      {status === 'NONE' && <Button type="primary" icon={<CaretRightOutlined />} loading={busy} onClick={onRun}>Run scenario</Button>}
       {status === 'RUNNING' && (
         <>
-          <AC.Badge tone="success" dot square>Running</AC.Badge>
+          <Badge status="processing" text={<Text strong>Running</Text>} />
           {canPause
-            ? <AC.Button variant="secondary" size="sm" loading={busy} leadingIcon={<Icon name="Pause" size={14} />} onClick={onPause}>Pause</AC.Button>
-            : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{noPauseNote}</span>}
-          <AC.Button variant="ghost" size="sm" loading={busy} leadingIcon={<Icon name="Flag" size={14} />} onClick={onComplete}>Finish</AC.Button>
+            ? <Button size="small" icon={<PauseOutlined />} loading={busy} onClick={onPause}>Pause</Button>
+            : <Text type="secondary" style={{ fontSize: 12 }}>{noPauseNote}</Text>}
+          {finish}
         </>
       )}
       {status === 'PAUSED' && (
         <>
-          <AC.Badge tone="warning" dot square>Paused</AC.Badge>
-          <AC.Button variant="primary" size="sm" loading={busy} leadingIcon={<Icon name="Play" size={14} />} onClick={onResume}>Resume</AC.Button>
-          <AC.Button variant="ghost" size="sm" loading={busy} leadingIcon={<Icon name="Flag" size={14} />} onClick={onComplete}>Finish</AC.Button>
+          <Badge status="warning" text={<Text strong>Paused</Text>} />
+          <Button type="primary" size="small" icon={<CaretRightOutlined />} loading={busy} onClick={onResume}>Resume</Button>
+          {finish}
         </>
       )}
-      {status === 'COMPLETED' && <AC.Badge tone="brand" dot square>Completed</AC.Badge>}
+      {status === 'COMPLETED' && <Badge status="success" text={<Text strong>Completed</Text>} />}
       {status !== 'NONE' && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)' }}>
-          <Icon name="Timer" size={14} style={{ color: 'var(--text-tertiary)' }} /> T+{fmtClock(run.elapsed ?? 0)}{status === 'COMPLETED' ? ' · final' : ''}
-        </span>
+        <Tag icon={<ClockCircleOutlined />} style={{ fontFamily: token.fontFamilyCode, fontSize: 13, padding: '2px 8px', marginInlineEnd: 0 }}>
+          T+{fmtClock(run.elapsed ?? 0)}{status === 'COMPLETED' ? ' · final' : ''}
+        </Tag>
       )}
-    </div>
-  );
-}
-
-function NotRunning({ icon, label }) {
-  return (
-    <AC.Card>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-tertiary)', fontSize: 13 }}>
-        <Icon name={icon} size={16} /> Press <strong style={{ color: 'var(--text-secondary)' }}>Run scenario</strong> to begin the {label} feed.
-      </div>
-    </AC.Card>
-  );
-}
-
-function PanelTitle({ icon, title, sub }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-      <Icon name={icon} size={18} style={{ color: 'var(--text-secondary)' }} />
-      <div>
-        <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{title}</h2>
-        {sub && <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>{sub}</div>}
-      </div>
-    </div>
+    </Flex>
   );
 }
 
 function BriefPanel({ scenario }) {
+  const { token } = theme.useToken();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PanelTitle icon="BookOpen" title="Briefing" />
-      <AC.Card>{scenario.brief ? <Markdown>{scenario.brief}</Markdown> : <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>No briefing provided.</span>}</AC.Card>
+    <Flex vertical gap={16}>
+      <PanelHeader icon={<FileTextOutlined />} title="Briefing" sub="What happened, and what you need to find out." />
+      <Card>{scenario.brief ? <Markdown>{scenario.brief}</Markdown> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No briefing provided." />}</Card>
       {scenario.objectives?.length > 0 && (
-        <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Target" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Objectives</span></div>}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {scenario.objectives.map((o, i) => (
-              <div key={o.id || i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <div style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-tertiary)', fontSize: 11, display: 'grid', placeItems: 'center', flex: 'none', marginTop: 1 }}>{i + 1}</div>
-                <span style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{o.text}</span>
-              </div>
-            ))}
-          </div>
-        </AC.Card>
+        <Card title={<Space><AimOutlined />Objectives</Space>} styles={{ body: { paddingBlock: 4 } }}>
+          {scenario.objectives.map((o, i) => (
+            <Flex key={o.id || i} gap={12} align="flex-start" style={{ padding: '10px 0', borderTop: i ? `1px solid ${token.colorBorderSecondary}` : 'none' }}>
+              <Tag color="blue" style={{ marginInlineEnd: 0, minWidth: 26, textAlign: 'center' }}>{i + 1}</Tag>
+              <Text>{o.text}</Text>
+            </Flex>
+          ))}
+        </Card>
       )}
-    </div>
+    </Flex>
   );
 }
 
-const VERDICT_META = {
-  TRUE_POSITIVE: { label: 'TP', tone: 'danger' },
-  FALSE_POSITIVE: { label: 'FP', tone: 'neutral' },
-  BENIGN: { label: 'Benign', tone: 'success' },
-  ESCALATED: { label: 'Esc', tone: 'warning' },
-};
-
-function FeedPanel({ kind, run, cases, onOpenCase }) {
-  const isAlerts = kind === 'alerts';
-  const items = (isAlerts ? run.alerts : run.logs) || [];
+/* The alert queue: filterable table; click a row (or Triage) to open its case. */
+function AlertsPanel({ run, alerts, cases, onOpenCase }) {
+  const { token } = theme.useToken();
+  const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
+  const mono = { fontFamily: token.fontFamilyCode, fontSize: 12 };
 
-  const filtered = useMemo(() => {
-    if (isAlerts) return items;
+  const counts = useMemo(() => {
+    const c = { all: alerts.length, open: 0, triaged: 0, closed: 0 };
+    for (const a of alerts) {
+      const cs = cases?.[a.id];
+      if (!cs?.verdict) c.open += 1; else c.triaged += 1;
+      if (cs?.status === 'CLOSED') c.closed += 1;
+    }
+    return c;
+  }, [alerts, cases]);
+
+  const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? items.filter((e) => JSON.stringify(e).toLowerCase().includes(s)) : items;
-  }, [items, q, isAlerts]);
+    return alerts
+      .filter((a) => {
+        const cs = cases?.[a.id];
+        if (filter === 'open') return !cs?.verdict;
+        if (filter === 'triaged') return Boolean(cs?.verdict);
+        if (filter === 'closed') return cs?.status === 'CLOSED';
+        return true;
+      })
+      .filter((a) => !s || JSON.stringify(a).toLowerCase().includes(s));
+  }, [alerts, cases, filter, q]);
 
-  if (run.status === 'NONE') {
-    return (<div><PanelTitle icon={isAlerts ? 'Bell' : 'ScrollText'} title={isAlerts ? 'Alert queue' : 'Logs'} /><NotRunning icon={isAlerts ? 'Bell' : 'ScrollText'} label={isAlerts ? 'alert' : 'log'} /></div>);
-  }
+  const header = (
+    <PanelHeader
+      icon={<AlertOutlined />}
+      title="Alert queue"
+      sub={run.status === 'NONE' ? 'Detections fire here as the scenario plays out.' : `${alerts.length} fired${run.status === 'PAUSED' ? ' · paused' : ''}`}
+    />
+  );
+  if (run.status === 'NONE') return <div>{header}<NotRunningCard label="alert" /></div>;
+
+  const columns = [
+    { title: 'Fired', dataIndex: 'seek', key: 'seek', width: 80, sorter: (a, b) => (a.seek ?? 0) - (b.seek ?? 0), render: (v) => <Text type="secondary" style={mono}>T+{v ?? 0}s</Text> },
+    {
+      title: 'Alert', dataIndex: 'title', key: 'title',
+      render: (v, r) => (
+        <Flex vertical gap={2}>
+          <Text strong>{v || r.id}</Text>
+          <Text type="secondary" style={{ ...mono, fontSize: 11 }}>{r.id}</Text>
+        </Flex>
+      ),
+    },
+    { title: 'Host', dataIndex: 'host', key: 'host', width: 130, render: (v) => <Text style={mono}>{v || '—'}</Text> },
+    {
+      title: 'Source → Dest', key: 'flow', width: 220,
+      render: (_v, r) => <Text style={mono}>{r.source || '—'} <Text type="secondary">→</Text> {r.destination || '—'}</Text>,
+    },
+    { title: 'Rule', dataIndex: 'rule', key: 'rule', width: 120, render: (v) => (v ? <Tag color="geekblue" style={mono}>{v}</Tag> : <Text type="secondary">—</Text>) },
+    { title: 'Events', dataIndex: 'count', key: 'count', width: 76, align: 'right', render: (v) => <Text style={mono}>{v ?? '—'}</Text> },
+    {
+      title: 'Case', key: 'case', width: 190, align: 'right',
+      render: (_v, row) => {
+        const c = cases?.[row.id];
+        const vm = c?.verdict ? VERDICT_META[c.verdict] : null;
+        return (
+          <Space size={6} onClick={(e) => e.stopPropagation()}>
+            {vm ? <Tag color={vm.color} style={{ marginInlineEnd: 0 }}>{vm.short}</Tag> : <Tag color="error" variant="outlined" style={{ marginInlineEnd: 0 }}>New</Tag>}
+            {c?.status === 'CLOSED' && <Tooltip title="Case closed"><CheckCircleFilled style={{ color: token.colorSuccess }} /></Tooltip>}
+            <Button size="small" type={c ? 'default' : 'primary'} icon={c ? <EditOutlined /> : <AuditOutlined />} onClick={() => onOpenCase?.(row)}>
+              {c ? 'Edit' : 'Triage'}
+            </Button>
+          </Space>
+        );
+      },
+    },
+  ];
 
   return (
     <div>
-      <PanelTitle icon={isAlerts ? 'Bell' : 'ScrollText'} title={isAlerts ? 'Alert queue' : 'Logs'} sub={`${items.length} ${isAlerts ? 'fired' : 'entries'}${run.status === 'PAUSED' ? ' · paused' : ''}`} />
-      {!isAlerts && (
-        <div style={{ marginBottom: 12, maxWidth: 320 }}>
-          <AC.Input size="sm" placeholder="Filter logs…" value={q} onChange={(e) => setQ(e.target.value)} leadingIcon={<Icon name="Search" size={15} />} />
-        </div>
-      )}
-      {items.length === 0 ? (
-        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-tertiary)', fontSize: 13 }}><AC.Spinner size={14} /> {run.status === 'PAUSED' ? 'Paused — resume to continue the feed.' : `Monitoring… ${isAlerts ? 'alerts' : 'logs'} will appear as they fire.`}</div></AC.Card>
-      ) : isAlerts ? (
-        <AC.Card padded={false}>
-          <AC.Table
-            rowKey="id"
-            hover={false}
-            columns={[
-              { key: 'seek', header: 'At', width: '70px', mono: true, render: (v) => `T+${v ?? 0}s` },
-              { key: 'title', header: 'Alert', primary: true },
-              { key: 'host', header: 'Host', mono: true, width: '120px' },
-              { key: 'source', header: 'Source → Dest', mono: true, render: (_v, r) => `${r.source || '—'} → ${r.destination || '—'}` },
-              { key: 'rule', header: 'Rule', mono: true, width: '120px', render: (v) => v || '—' },
-              { key: 'count', header: 'Events', align: 'right', mono: true, width: '80px', render: (v) => v ?? '—' },
-              {
-                key: 'id', header: 'Case', width: '150px', align: 'right',
-                render: (_v, row) => {
-                  const c = cases?.[row.id];
-                  const vm = c?.verdict ? VERDICT_META[c.verdict] : null;
-                  return (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                      {vm && <AC.Badge tone={vm.tone} square>{vm.label}</AC.Badge>}
-                      {c?.status === 'CLOSED' && <Icon name="CircleCheck" size={13} style={{ color: 'var(--status-success, #22c55e)' }} />}
-                      <AC.Button variant={c ? 'ghost' : 'secondary'} size="sm" leadingIcon={<Icon name="Gavel" size={13} />} onClick={() => onOpenCase?.(row)}>{c ? 'Edit' : 'Triage'}</AC.Button>
-                    </div>
-                  );
-                },
-              },
-            ]}
-            rows={items.map((a, i) => ({ ...a, id: a.id ?? `a${i}` }))}
-          />
-        </AC.Card>
+      {header}
+      {alerts.length === 0 ? (
+        <Card>
+          <Flex align="center" gap={10}>
+            <Spin size="small" spinning={run.status === 'RUNNING'} />
+            <Text type="secondary">{run.status === 'PAUSED' ? 'Paused — resume to continue the feed.' : 'Monitoring… alerts will appear as they fire.'}</Text>
+          </Flex>
+        </Card>
       ) : (
-        <AC.Card padded={false}>
-          <AC.Table
-            rowKey="__k"
-            compact
-            hover={false}
-            columns={[
-              { key: 'ts', header: 'Time', mono: true, width: '190px' },
-              { key: 'host', header: 'Host', mono: true, width: '110px' },
-              { key: 'source', header: 'Source', mono: true, width: '90px' },
-              { key: 'action', header: 'Action', mono: true, width: '140px' },
-              { key: 'user', header: 'User', mono: true, width: '100px', render: (v) => v || '—' },
-              { key: 'message', header: 'Message', mono: true, render: (v) => <span style={{ wordBreak: 'break-all' }}>{v}</span> },
-            ]}
-            rows={filtered.map((e, i) => ({ ...e, __k: i }))}
-          />
-        </AC.Card>
+        <Flex vertical gap={12}>
+          {counts.open > 0 && (
+            <Alert
+              type="info"
+              showIcon
+              title={`${counts.open} alert${counts.open === 1 ? '' : 's'} waiting for triage`}
+              description="Open an alert to investigate it: pivot into Logs, EDR and OSQuery, then record a verdict, your notes and any IoCs — and close the case."
+            />
+          )}
+          <Flex gap={12} wrap align="center" justify="space-between">
+            <Segmented
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: `All (${counts.all})` },
+                { value: 'open', label: `Untriaged (${counts.open})` },
+                { value: 'triaged', label: `Triaged (${counts.triaged})` },
+                { value: 'closed', label: `Closed (${counts.closed})` },
+              ]}
+            />
+            <Input.Search allowClear placeholder="Filter alerts…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 260 }} />
+          </Flex>
+          <Card styles={{ body: { padding: 0 } }}>
+            <Table
+              size="middle"
+              rowKey="id"
+              columns={columns}
+              dataSource={rows}
+              pagination={false}
+              scroll={{ x: 900 }}
+              onRow={(row) => ({ onClick: () => onOpenCase?.(row), style: { cursor: 'pointer' } })}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No alerts match this filter." /> }}
+            />
+          </Card>
+        </Flex>
       )}
     </div>
   );
 }
 
-function ProcessTree({ nodes, depth = 0 }) {
-  if (!Array.isArray(nodes)) return null;
-  return (
-    <>
-      {nodes.map((p, i) => (
-        <div key={`${p.pid}-${i}`}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '3px 0', paddingLeft: depth * 20 }}>
-            <Icon name="ChevronRight" size={12} style={{ color: 'var(--text-tertiary)', opacity: depth ? 1 : 0 }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text-primary)' }}>{p.name}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-tertiary)' }}>pid {p.pid}{p.user ? ` · ${p.user}` : ''}</span>
-            {p.cmd && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-tertiary)', wordBreak: 'break-all' }}>{p.cmd}</span>}
-          </div>
-          {Array.isArray(p.children) && p.children.length > 0 && <ProcessTree nodes={p.children} depth={depth + 1} />}
-        </div>
-      ))}
-    </>
-  );
+/* Process list → antd Tree data (stable keys from the path). */
+function toTreeData(nodes, mono, path = 'p') {
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map((p, i) => {
+    const key = `${path}-${i}`;
+    return {
+      key,
+      title: (
+        <span style={mono}>
+          <Text strong style={mono}>{p.name}</Text>{' '}
+          <Text type="secondary" style={{ ...mono, fontSize: 11 }}>pid {p.pid}{p.user ? ` · ${p.user}` : ''}</Text>
+          {p.cmd && <> <Text type="secondary" style={{ ...mono, fontSize: 11, wordBreak: 'break-all' }}>{p.cmd}</Text></>}
+        </span>
+      ),
+      children: Array.isArray(p.children) && p.children.length > 0 ? toTreeData(p.children, mono, key) : undefined,
+    };
+  });
 }
 
-const fmt = (v) => (v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));
 function DataTable({ rows }) {
-  if (!Array.isArray(rows) || rows.length === 0) return <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No rows.</span>;
+  const { token } = theme.useToken();
+  if (!Array.isArray(rows) || rows.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No rows." />;
+  const mono = { fontFamily: token.fontFamilyCode, fontSize: 12, whiteSpace: 'nowrap' };
   const cols = [...new Set(rows.flatMap((r) => Object.keys(r || {})))];
   return (
-    <div style={{ overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-        <thead><tr>{cols.map((c) => <th key={c} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-default)', whiteSpace: 'nowrap', fontWeight: 600 }}>{c}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => (<tr key={i}>{cols.map((c) => <td key={c} style={{ padding: '6px 10px', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', whiteSpace: 'nowrap' }}>{fmt(r[c])}</td>)}</tr>))}</tbody>
-      </table>
-    </div>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 8 }}>{title}</div>
-      {children}
-    </div>
+    <Table
+      size="small"
+      rowKey={(_r, i) => i}
+      dataSource={rows}
+      pagination={false}
+      scroll={{ x: 'max-content' }}
+      columns={cols.map((c) => ({ title: c, dataIndex: c, key: c, render: (v) => <Text style={mono}>{fmt(v)}</Text> }))}
+    />
   );
 }
 
 function EndpointsPanel({ endpoints }) {
+  const { token } = theme.useToken();
   const [host, setHost] = useState(endpoints[0]?.id ?? null);
   const ep = endpoints.find((e) => e.id === host) || endpoints[0];
-  if (endpoints.length === 0) return (<div><PanelTitle icon="MonitorSmartphone" title="Endpoints" /><AC.Card><span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>No endpoint data in this scenario.</span></AC.Card></div>);
+  const mono = { fontFamily: token.fontFamilyCode, fontSize: 12.5 };
+  const header = <PanelHeader icon={<DesktopOutlined />} title="EDR" sub="Endpoint detection & response telemetry" />;
+  if (endpoints.length === 0) return <div>{header}<Card><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No endpoint data in this scenario." /></Card></div>;
+
+  const edr = ep.edr;
+  const has = (k) => Array.isArray(edr?.[k]) && edr[k].length > 0;
+  const tabs = [
+    has('processes') && {
+      key: 'processes', label: 'Process tree',
+      children: <Tree showLine blockNode selectable={false} defaultExpandAll treeData={toTreeData(edr.processes, mono)} />,
+    },
+    has('connections') && { key: 'connections', label: `Network (${edr.connections.length})`, children: <DataTable rows={edr.connections} /> },
+    has('browserHistory') && { key: 'browser', label: `Browser history (${edr.browserHistory.length})`, children: <DataTable rows={edr.browserHistory} /> },
+    has('shellHistory') && { key: 'shell', label: `Shell history (${edr.shellHistory.length})`, children: <DataTable rows={edr.shellHistory} /> },
+  ].filter(Boolean);
 
   return (
-    <div>
-      <PanelTitle icon="MonitorSmartphone" title="EDR" sub="Endpoint detection & response telemetry" />
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-        {endpoints.map((e) => (
-          <button key={e.id} onClick={() => setHost(e.id)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 11px', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 12.5,
-            background: e.id === ep.id ? 'var(--surface-raised)' : 'var(--surface-inset)',
-            border: '1px solid ' + (e.id === ep.id ? 'var(--border-default)' : 'var(--border-subtle)'),
-            color: e.id === ep.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-          }}><Icon name="Server" size={13} /> {e.hostname}</button>
-        ))}
-      </div>
-
-      <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Cpu" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>EDR · {ep.hostname}</span></div>}>
-        {ep.edr ? (
-          <>
-            {Array.isArray(ep.edr.processes) && ep.edr.processes.length > 0 && <Section title="Process tree"><div style={{ overflow: 'auto' }}><ProcessTree nodes={ep.edr.processes} /></div></Section>}
-            {Array.isArray(ep.edr.connections) && ep.edr.connections.length > 0 && <Section title="Network connections"><DataTable rows={ep.edr.connections} /></Section>}
-            {Array.isArray(ep.edr.browserHistory) && ep.edr.browserHistory.length > 0 && <Section title="Browser history"><DataTable rows={ep.edr.browserHistory} /></Section>}
-            {Array.isArray(ep.edr.shellHistory) && ep.edr.shellHistory.length > 0 && <Section title="Shell history"><DataTable rows={ep.edr.shellHistory} /></Section>}
-          </>
-        ) : <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No EDR data for this host. Try the OSQuery tab.</span>}
-      </AC.Card>
-    </div>
+    <Flex vertical gap={12}>
+      {header}
+      <Segmented
+        value={ep.id}
+        onChange={setHost}
+        options={endpoints.map((e) => ({ value: e.id, label: <span style={mono}>{e.hostname}</span>, icon: <DesktopOutlined /> }))}
+        style={{ alignSelf: 'flex-start' }}
+      />
+      <Card title={<Space><DesktopOutlined /><span>EDR · <span style={mono}>{ep.hostname}</span></span></Space>}>
+        {edr && tabs.length > 0
+          ? <Tabs key={ep.id} items={tabs} />
+          : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No EDR data for this host. Try the OSQuery tab." />}
+      </Card>
+    </Flex>
   );
 }
 
 function ArtifactsPanel({ endpoints }) {
+  const { token } = theme.useToken();
   const withArtifacts = endpoints.filter((e) => e.hasArtifact);
   return (
     <div>
-      <PanelTitle icon="Paperclip" title="Artifacts" sub="Downloadable evidence per host" />
-      {withArtifacts.length === 0 ? (
-        <AC.Card><span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>No evidence artifacts in this scenario.</span></AC.Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {withArtifacts.map((e) => (
-            <AC.Card key={e.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--surface-inset)', border: '1px solid var(--border-default)', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}><Icon name="FileArchive" size={18} /></div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)' }}>{e.hostname}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{e.artifactName || 'artifact.zip'}{e.artifactSize ? ` · ${(e.artifactSize / 1024).toFixed(0)} KB` : ''}</div>
-                </div>
-                <a href={`/api/artifacts/${e.id}`} style={{ textDecoration: 'none' }}>
-                  <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="Download" size={14} />}>Download</AC.Button>
-                </a>
+      <PanelHeader icon={<PaperClipOutlined />} title="Artifacts" sub="Downloadable evidence per host" />
+      <Card styles={{ body: { paddingBlock: withArtifacts.length ? 4 : undefined } }}>
+        {withArtifacts.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No evidence artifacts in this scenario." />
+        ) : (
+          withArtifacts.map((e, i) => (
+            <Flex key={e.id} align="center" gap={14} style={{ padding: '12px 0', borderTop: i ? `1px solid ${token.colorBorderSecondary}` : 'none' }}>
+              <Flex align="center" justify="center" style={{ width: 40, height: 40, flex: 'none', borderRadius: token.borderRadius, background: token.colorFillTertiary, fontSize: 18, color: token.colorTextSecondary }}><FileZipOutlined /></Flex>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text strong style={{ fontFamily: token.fontFamilyCode }}>{e.hostname}</Text>
+                <div><Text type="secondary" style={{ fontSize: 12.5 }}>{e.artifactName || 'artifact.zip'}{e.artifactSize ? ` · ${(e.artifactSize / 1024).toFixed(0)} KB` : ''}</Text></div>
               </div>
-            </AC.Card>
-          ))}
-        </div>
-      )}
+              <Button icon={<DownloadOutlined />} href={`/api/artifacts/${e.id}`}>Download</Button>
+            </Flex>
+          ))
+        )}
+      </Card>
     </div>
   );
 }
 
 function SubmitForm({ scenario, submission, preview }) {
+  const { token } = theme.useToken();
   const [state, action, saving] = useActionState(submitScenario.bind(null, scenario.id), {});
   const answers = submission?.flagAnswers || {};
   const [file, setFile] = useState(null);          // newly picked File (display only)
@@ -552,142 +649,118 @@ function SubmitForm({ scenario, submission, preview }) {
   // A student may re-do an assessment until the instructor commits it for
   // grading; after that the form locks to a read-only recap.
   const locked = scenario.type === 'ASSESSMENT' && Boolean(submission?.committed);
+  const mono = { fontFamily: token.fontFamilyCode };
+  const fileRow = { padding: '8px 12px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, border: `1px solid ${token.colorBorderSecondary}` };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>{locked ? 'Your instructor has committed this for grading — it’s locked and awaiting your result.' : 'Answer the flags and (if required) write or upload your report. You can keep updating it until your instructor commits it for grading.'}</div>
+    <Flex vertical gap={16}>
+      <Text type="secondary">{locked ? 'Your instructor has committed this for grading — it’s locked and awaiting your result.' : 'Answer the flags and (if required) write or upload your report. You can keep updating it until your instructor commits it for grading.'}</Text>
       {submission?.status === 'GRADED' && (
-        <AC.Card accent>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Icon name="Award" size={22} style={{ color: 'var(--status-success, #22c55e)' }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Graded — {submission.grade ?? '—'} / 100</div>
-              {submission.feedback && <div style={{ marginTop: 6 }}><RichText html={submission.feedback} /></div>}
-            </div>
-          </div>
-        </AC.Card>
+        <Alert
+          type="success"
+          showIcon
+          icon={<TrophyOutlined />}
+          title={<Text strong>Graded — {submission.grade ?? '—'} / 100</Text>}
+          description={submission.feedback ? <RichText html={submission.feedback} /> : undefined}
+        />
       )}
       {submission && submission.status !== 'GRADED' && (
-        <AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}><Icon name={locked ? 'Lock' : 'Clock'} size={15} /> {locked ? 'Committed for grading — awaiting your result.' : 'Submitted — you can keep updating it until your instructor commits it for grading.'}</div></AC.Card>
+        <Alert
+          type={locked ? 'warning' : 'info'}
+          showIcon
+          icon={locked ? <LockOutlined /> : <ClockCircleOutlined />}
+          title={locked ? 'Committed for grading — awaiting your result.' : 'Submitted — you can keep updating it until your instructor commits it for grading.'}
+        />
       )}
 
       {locked ? (
         <>
           {scenario.flags.length > 0 && (
-            <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Flag" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Your flag answers</span></div>}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {scenario.flags.map((f, i) => (
-                  <div key={f.id}>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{i + 1}. {f.question}</div>
-                    <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>{answers[f.id] || '— no answer —'}</div>
-                  </div>
-                ))}
-              </div>
-            </AC.Card>
+            <Card size="small" title={<Space><FlagOutlined />Your flag answers</Space>}>
+              <Descriptions
+                size="small"
+                column={1}
+                layout="vertical"
+                items={scenario.flags.map((f, i) => ({
+                  key: f.id,
+                  label: `${i + 1}. ${f.question}`,
+                  children: <Text style={mono}>{answers[f.id] || '— no answer —'}</Text>,
+                }))}
+              />
+            </Card>
           )}
-          <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="FileText" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Your report</span></div>}>
+          <Card size="small" title={<Space><FileTextOutlined />Your report</Space>}>
             {submission.report ? (
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{submission.report}</div>
+              <Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{submission.report}</Paragraph>
             ) : submission.reportFileName ? (
-              <a href={`/api/submissions/${submission.id}/report`} style={{ textDecoration: 'none', fontSize: 12.5, color: 'var(--text-link)', display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name="FileText" size={14} /> {submission.reportFileName}</a>
+              <Button type="link" icon={<FileTextOutlined />} href={`/api/submissions/${submission.id}/report`} style={{ paddingInline: 0 }}>{submission.reportFileName}</Button>
             ) : (
-              <span style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No report submitted.</span>
+              <Text type="secondary">No report submitted.</Text>
             )}
-          </AC.Card>
+          </Card>
         </>
       ) : (
-      <form action={preview ? undefined : action} onSubmit={preview ? (e) => e.preventDefault() : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {scenario.flags.length > 0 && (
-          <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="Flag" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Flags</span></div>}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {scenario.flags.map((f, i) => (
-                <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label style={{ fontSize: 13, color: 'var(--text-primary)' }}>{i + 1}. {f.question}{f.points ? <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}> · {f.points} pts</span> : null}</label>
-                  <AC.Input name={`flag:${f.id}`} defaultValue={answers[f.id] || ''} placeholder="Your answer" mono leadingIcon={<Icon name="Flag" size={15} />} />
-                </div>
-              ))}
-            </div>
-          </AC.Card>
-        )}
+        <form action={preview ? undefined : action} onSubmit={preview ? (e) => e.preventDefault() : undefined}>
+          <Flex vertical gap={16}>
+            {scenario.flags.length > 0 && (
+              <Card size="small" title={<Space><FlagOutlined />Flags</Space>}>
+                <Flex vertical gap={14}>
+                  {scenario.flags.map((f, i) => (
+                    <Flex key={f.id} vertical gap={6}>
+                      <label htmlFor={`flag-${f.id}`}>
+                        <Text>{i + 1}. {f.question}</Text>
+                        {f.points ? <Text type="secondary" style={{ fontSize: 12 }}> · {f.points} pts</Text> : null}
+                      </label>
+                      <Input id={`flag-${f.id}`} name={`flag:${f.id}`} defaultValue={answers[f.id] || ''} placeholder="Your answer" prefix={<FlagOutlined />} style={mono} />
+                    </Flex>
+                  ))}
+                </Flex>
+              </Card>
+            )}
 
-        <AC.Card header={<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="FileText" size={16} style={{ color: 'var(--text-secondary)' }} /><span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>Report {scenario.reportRequired ? '(required)' : '(optional)'}</span></div>}>
-          {scenario.reportPrompt && <p style={{ fontSize: 12.5, color: 'var(--text-tertiary)', margin: '0 0 10px', lineHeight: 1.5 }}>{scenario.reportPrompt}</p>}
-          <textarea name="report" rows={7} defaultValue={submission?.report || ''} placeholder="Write up your findings, timeline, and recommendations…" spellCheck={false}
-            style={{ width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.5 }} />
+            <Card size="small" title={<Space><FileTextOutlined />Report {scenario.reportRequired ? <Tag color="red">required</Tag> : <Tag>optional</Tag>}</Space>}>
+              {scenario.reportPrompt && <Paragraph type="secondary" style={{ fontSize: 13 }}>{scenario.reportPrompt}</Paragraph>}
+              <Input.TextArea name="report" autoSize={{ minRows: 7, maxRows: 20 }} defaultValue={submission?.report || ''} placeholder="Write up your findings, timeline, and recommendations…" spellCheck={false} />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0 8px' }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>or upload a document</span>
-            <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
-          </div>
+              <Flex align="center" gap={8} style={{ margin: '12px 0 8px' }}>
+                <div style={{ flex: 1, height: 1, background: token.colorBorderSecondary }} />
+                <Text type="secondary" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>or upload a document</Text>
+                <div style={{ flex: 1, height: 1, background: token.colorBorderSecondary }} />
+              </Flex>
 
-          {removeFile && !file && <input type="hidden" name="removeReportFile" value="1" />}
-          {/* Always-mounted so the picked File stays in the form submission. */}
-          <input ref={fileRef} type="file" name="reportFile" accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" style={{ display: 'none' }} onChange={(e) => { setFile(e.target.files?.[0] || null); setRemoveFile(false); }} />
-          {file ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
-              <Icon name="FileText" size={16} style={{ color: 'var(--accent, #7c8cff)', flex: 'none' }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name} · {(file.size / 1024).toFixed(0)} KB</span>
-              <AC.IconButton label="Remove" onClick={clearFile}><Icon name="X" size={15} /></AC.IconButton>
-            </div>
-          ) : existingFile ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
-              <Icon name="FileCheck2" size={16} style={{ color: 'var(--status-success, #22c55e)', flex: 'none' }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{existingFile} <span style={{ color: 'var(--text-tertiary)' }}>· uploaded</span></span>
-              {submission?.id && <a href={`/api/submissions/${submission.id}/report`} style={{ textDecoration: 'none' }}><AC.Button variant="ghost" size="sm" leadingIcon={<Icon name="Download" size={13} />}>Open</AC.Button></a>}
-              <AC.IconButton label="Remove" onClick={() => setRemoveFile(true)}><Icon name="Trash2" size={15} /></AC.IconButton>
-            </div>
-          ) : (
-            <button type="button" onClick={() => fileRef.current?.click()} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, background: 'var(--surface-inset)', border: '1px dashed var(--border-default)', cursor: 'pointer', fontSize: 12.5, color: 'var(--text-secondary)' }}>
-              <Icon name="Upload" size={15} /> Choose .pdf, .docx or .doc
-            </button>
-          )}
-        </AC.Card>
+              {removeFile && !file && <input type="hidden" name="removeReportFile" value="1" />}
+              {/* Always-mounted so the picked File stays in the form submission. */}
+              <input ref={fileRef} type="file" name="reportFile" accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword" style={{ display: 'none' }} onChange={(e) => { setFile(e.target.files?.[0] || null); setRemoveFile(false); }} />
+              {file ? (
+                <Flex align="center" gap={10} style={fileRow}>
+                  <FileTextOutlined style={{ color: token.colorPrimary }} />
+                  <Text ellipsis style={{ flex: 1, minWidth: 0 }}>{file.name} · {(file.size / 1024).toFixed(0)} KB</Text>
+                  <Tooltip title="Remove"><Button type="text" size="small" icon={<CloseOutlined />} onClick={clearFile} /></Tooltip>
+                </Flex>
+              ) : existingFile ? (
+                <Flex align="center" gap={10} style={fileRow}>
+                  <FileDoneOutlined style={{ color: token.colorSuccess }} />
+                  <Text ellipsis style={{ flex: 1, minWidth: 0 }}>{existingFile} <Text type="secondary">· uploaded</Text></Text>
+                  {submission?.id && <Button type="text" size="small" icon={<DownloadOutlined />} href={`/api/submissions/${submission.id}/report`}>Open</Button>}
+                  <Tooltip title="Remove"><Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => setRemoveFile(true)} /></Tooltip>
+                </Flex>
+              ) : (
+                <Button icon={<UploadOutlined />} onClick={() => fileRef.current?.click()} style={{ borderStyle: 'dashed' }}>Choose .pdf, .docx or .doc</Button>
+              )}
+            </Card>
 
-        {state?.error && <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}><Icon name="TriangleAlert" size={15} /> {state.error}</div>}
-        {state?.ok && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-success, #22c55e)' }}><Icon name="CircleCheck" size={15} /> {state.ok}</div>}
+            {state?.error && <Alert type="error" showIcon title={state.error} />}
+            {state?.ok && <Alert type="success" showIcon title={state.ok} />}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <AC.Button type="submit" variant="primary" disabled={preview} loading={saving} leadingIcon={<Icon name="Send" size={14} />}>{preview ? 'Preview — not submitted' : submission ? 'Re-submit' : 'Submit deliverables'}</AC.Button>
-        </div>
-      </form>
+            <Flex justify="flex-end">
+              <Button htmlType="submit" type="primary" disabled={preview} loading={saving} icon={<SendOutlined />}>
+                {preview ? 'Preview — not submitted' : submission ? 'Re-submit' : 'Submit deliverables'}
+              </Button>
+            </Flex>
+          </Flex>
+        </form>
       )}
-    </div>
-  );
-}
-
-function Fab({ icon, label, active, badge, onClick, dataTour }) {
-  return (
-    <button onClick={onClick} title={label} data-tour={dataTour} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999, cursor: 'pointer',
-      background: active ? 'var(--accent, #7c8cff)' : 'var(--surface-raised)',
-      border: '1px solid ' + (active ? 'var(--accent, #7c8cff)' : 'var(--border-default)'),
-      color: active ? '#fff' : 'var(--text-primary)', fontSize: 13, fontWeight: 600,
-      boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
-    }}>
-      <Icon name={icon} size={17} /> {label}
-      {badge && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, padding: '1px 6px', borderRadius: 999, background: active ? 'rgba(255,255,255,0.22)' : 'var(--surface-inset)', color: active ? '#fff' : 'var(--text-tertiary)' }}>{badge}</span>}
-    </button>
-  );
-}
-
-function SlideOver({ title, icon, width = 480, onClose, children }) {
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 45 }} />
-      <div role="dialog" aria-label={title} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: `min(94vw, ${width}px)`, background: 'var(--surface-panel)', borderLeft: '1px solid var(--border-default)', zIndex: 46, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 30px rgba(0,0,0,0.3)' }}>
-        <div style={{ height: 52, flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <Icon name={icon} size={17} style={{ color: 'var(--text-secondary)' }} />
-          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</span>
-          <AC.IconButton label="Close" onClick={onClose}><Icon name="X" size={18} /></AC.IconButton>
-        </div>
-        <div style={{ flex: 1, overflow: 'auto', padding: 18 }}>{children}</div>
-      </div>
-    </>
+    </Flex>
   );
 }
 
@@ -695,18 +768,25 @@ function SlideOver({ title, icon, width = 480, onClose, children }) {
    submission. Assessment flags are graded by an instructor instead. */
 function FlagChecklist({ scenario, scenarioId, solvedFlagIds, onFlagSolved, preview }) {
   const flags = scenario.flags || [];
-  if (flags.length === 0) return <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No flags to answer in this scenario.</div>;
+  if (flags.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No flags to answer in this scenario." />;
+  const solved = flags.filter((f) => (solvedFlagIds || []).includes(f.id)).length;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.5 }}>Check each answer as you find it — instant feedback, no submission needed.</div>
+    <Flex vertical gap={12}>
+      <Card size="small">
+        <Flex align="center" gap={12}>
+          <Progress type="circle" size={52} percent={Math.round((solved / flags.length) * 100)} format={() => `${solved}/${flags.length}`} />
+          <Text type="secondary">Check each answer as you find it — instant feedback, no submission needed.</Text>
+        </Flex>
+      </Card>
       {flags.map((f, i) => (
         <FlagItem key={f.id} scenarioId={scenarioId} flag={f} index={i} solved={(solvedFlagIds || []).includes(f.id)} onSolved={onFlagSolved} preview={preview} />
       ))}
-    </div>
+    </Flex>
   );
 }
 
 function FlagItem({ scenarioId, flag, index, solved, onSolved, preview }) {
+  const { token } = theme.useToken();
   const [answer, setAnswer] = useState('');
   const [wrong, setWrong] = useState(false);
   const [busy, start] = useTransition();
@@ -726,31 +806,36 @@ function FlagItem({ scenarioId, flag, index, solved, onSolved, preview }) {
   };
 
   return (
-    <div style={{
-      borderRadius: 'var(--radius-sm)', padding: '13px 14px',
-      border: '1px solid ' + (solved ? 'var(--status-success, #22c55e)' : 'var(--border-default)'),
-      background: solved ? 'var(--success-subtle-bg, rgba(34,197,94,0.08))' : 'var(--surface-inset)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <Icon name={solved ? 'CircleCheck' : 'FlagTriangleRight'} size={15} style={{ color: solved ? 'var(--status-success, #22c55e)' : 'var(--accent, #7c8cff)' }} />
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Flag {index + 1}{flag.points ? ` · ${flag.points} pts` : ''}</span>
-        {solved && <AC.Badge tone="success" square>Solved</AC.Badge>}
-      </div>
-      <div style={{ fontSize: 13.5, color: 'var(--text-primary)', marginBottom: 10, lineHeight: 1.5 }}>{flag.question}</div>
+    <Card
+      size="small"
+      style={solved ? { borderColor: token.colorSuccessBorder, background: token.colorSuccessBg } : undefined}
+    >
+      <Flex align="center" gap={8} style={{ marginBottom: 8 }}>
+        {solved ? <CheckCircleFilled style={{ color: token.colorSuccess }} /> : <FlagOutlined style={{ color: token.colorPrimary }} />}
+        <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Flag {index + 1}{flag.points ? ` · ${flag.points} pts` : ''}</Text>
+        {solved && <Tag color="success">Solved</Tag>}
+      </Flex>
+      <Paragraph style={{ marginBottom: 10 }}>{flag.question}</Paragraph>
       {solved ? (
-        <div style={{ fontSize: 12.5, color: 'var(--status-success, #22c55e)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="Check" size={14} /> Correct.</div>
+        <Text type="success"><CheckOutlined /> Correct.</Text>
       ) : (
-        <>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <AC.Input value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} placeholder="Your answer" mono leadingIcon={<Icon name="Flag" size={15} />} />
-            </div>
-            <AC.Button variant="primary" size="md" loading={busy} onClick={submit}>Check</AC.Button>
-          </div>
-          {wrong && <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--status-danger, #ef4444)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon name="X" size={14} /> Not quite — keep investigating.</div>}
-        </>
+        <Flex vertical gap={8}>
+          <Space.Compact block>
+            <Input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onPressEnter={(e) => { e.preventDefault(); submit(); }}
+              placeholder="Your answer"
+              prefix={<FlagOutlined />}
+              status={wrong ? 'error' : undefined}
+              style={{ fontFamily: token.fontFamilyCode }}
+            />
+            <Button type="primary" loading={busy} onClick={submit}>Check</Button>
+          </Space.Compact>
+          {wrong && <Text type="danger"><CloseOutlined /> Not quite — keep investigating.</Text>}
+        </Flex>
       )}
-    </div>
+    </Card>
   );
 }
 

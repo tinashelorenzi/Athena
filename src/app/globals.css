@@ -4,6 +4,9 @@
    Import order matters: tailwind → fonts → tokens → base.
    ============================================================ */
 @import "./tokens/fonts.css";
+/* antd styles live in the `antd` layer (see providers.jsx); order it after
+   Tailwind's base/preflight so component styles win over the resets. */
+@layer theme, base, antd, components, utilities;
 @import "tailwindcss";
 @import "./tokens/colors.css";
 @import "./tokens/typography.css";

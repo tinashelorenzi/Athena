@@ -1,9 +1,10 @@
 'use client';
 import React, { useState, useActionState } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Button, Card, Divider, Flex, Input, Switch } from 'antd';
+import { SafetyCertificateOutlined, GlobalOutlined, KeyOutlined, CheckOutlined, FieldTimeOutlined } from '@ant-design/icons';
 import { saveSecuritySettings } from '@/app/actions/settings';
-import { SectionHeader, FormStatus, ToggleRow } from './parts';
+import { Field } from '../scenarios/primitives';
+import { SectionHeader, FormStatus, ToggleRow, FormLayout } from './parts';
 
 /* Platform security settings: Cloudflare Turnstile bot protection on the login
    form, plus session lifetime. Wired end-to-end — when enabled, the login page
@@ -13,56 +14,42 @@ export function SecuritySection({ security }) {
   const [enabled, setEnabled] = useState(security.turnstileEnabled);
 
   return (
-    <AC.Card header={<SectionHeader icon="ShieldCheck" title="Security" subtitle="Bot protection and session policy for the platform." />}>
-      <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <ToggleRow
-          label="Cloudflare Turnstile"
-          hint="Show a bot-protection challenge on the sign-in form."
-          checked={enabled}
-        >
-          <AC.Switch checked={enabled} onChange={() => setEnabled((v) => !v)} />
-        </ToggleRow>
-        {/* Switch isn't a native input, so mirror its state into the form. */}
-        <input type="hidden" name="turnstileEnabled" value={enabled ? 'on' : ''} />
+    <Card title={<SectionHeader icon={<SafetyCertificateOutlined />} title="Security" subtitle="Bot protection and session policy for the platform." />}>
+      <form action={action}>
+        <FormLayout>
+          <ToggleRow label="Cloudflare Turnstile" hint="Show a bot-protection challenge on the sign-in form.">
+            <Switch checked={enabled} onChange={setEnabled} />
+          </ToggleRow>
+          {/* Switch isn't a native input, so mirror its state into the form. */}
+          <input type="hidden" name="turnstileEnabled" value={enabled ? 'on' : ''} />
 
-        <AC.Input
-          label="Site key"
-          name="turnstileSiteKey"
-          defaultValue={security.turnstileSiteKey}
-          placeholder="0x4AAAAAAA..."
-          mono
-          leadingIcon={<Icon name="Globe" size={16} />}
-        />
-        <AC.Input
-          label="Secret key"
-          name="turnstileSecretKey"
-          type="password"
-          autoComplete="off"
-          placeholder={security.turnstileSecretConfigured ? '•••••••••••• (configured — leave blank to keep)' : 'Enter secret key'}
-          mono
-          leadingIcon={<Icon name="KeyRound" size={16} />}
-          hint="Stored encrypted. Leave blank to keep the current value."
-        />
+          <Field label="Site key">
+            <Input name="turnstileSiteKey" defaultValue={security.turnstileSiteKey} placeholder="0x4AAAAAAA..." prefix={<GlobalOutlined />} />
+          </Field>
+          <Field label="Secret key" hint="Stored encrypted. Leave blank to keep the current value.">
+            <Input.Password
+              name="turnstileSecretKey"
+              autoComplete="off"
+              placeholder={security.turnstileSecretConfigured ? '•••••••••••• (configured — leave blank to keep)' : 'Enter secret key'}
+              prefix={<KeyOutlined />}
+            />
+          </Field>
 
-        <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+          <Divider style={{ margin: '4px 0 20px' }} />
 
-        <AC.Input
-          label="Session lifetime (days)"
-          name="sessionLifetimeDays"
-          type="number"
-          min={1}
-          max={90}
-          defaultValue={security.sessionLifetimeDays}
-          leadingIcon={<Icon name="CalendarClock" size={16} />}
-          hint="How long a login stays valid. Applies to new logins (1–90 days)."
-        />
+          <Field label="Session lifetime (days)" hint="How long a login stays valid. Applies to new logins (1–90 days).">
+            <Input name="sessionLifetimeDays" type="number" min={1} max={90} defaultValue={security.sessionLifetimeDays} prefix={<FieldTimeOutlined />} style={{ maxWidth: 220 }} />
+          </Field>
 
-        <FormStatus state={state} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <AC.Button type="submit" variant="primary" loading={saving} leadingIcon={<Icon name="Check" size={14} />}>Save security settings</AC.Button>
-        </div>
+          <Flex vertical gap={12}>
+            <FormStatus state={state} />
+            <Flex justify="flex-end">
+              <Button type="primary" htmlType="submit" loading={saving} icon={<CheckOutlined />}>Save security settings</Button>
+            </Flex>
+          </Flex>
+        </FormLayout>
       </form>
-    </AC.Card>
+    </Card>
   );
 }
 

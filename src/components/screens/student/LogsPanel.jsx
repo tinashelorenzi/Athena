@@ -1,7 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Card, Flex, Input, Button, Tag, Tooltip, Table, Descriptions, Empty, Spin, Typography, theme } from 'antd';
+import { SearchOutlined, UnorderedListOutlined, ClockCircleOutlined, NumberOutlined, FileSearchOutlined } from '@ant-design/icons';
 import { filterLogs, availableFields } from '@/lib/kql';
 
 /* Kibana-Discover-style log search: KQL query bar, a time histogram you can brush
@@ -19,6 +19,7 @@ function ecsDoc(e) {
   if (e.fields) for (const k of Object.keys(e.fields)) base[k] = e.fields[k];
   return base;
 }
+const { Text, Title } = Typography;
 const hhmmss = (ms) => (Number.isNaN(ms) ? '' : new Date(ms).toISOString().slice(11, 19));
 const tsMs = (e) => Date.parse(String(e.ts));
 // Stable identity for a log doc so expanded rows + keys survive live streaming
@@ -26,7 +27,8 @@ const tsMs = (e) => Date.parse(String(e.ts));
 const docId = (e) => `${e.ts}|${e.host}|${e.source}|${e.action}|${e.message}`;
 
 export function LogsPanel({ run }) {
-  const entries = Array.isArray(run.logs) ? run.logs : [];
+  const { token } = theme.useToken();
+  const entries = useMemo(() => (Array.isArray(run.logs) ? run.logs : []), [run.logs]);
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState(() => new Set());
   const [showFields, setShowFields] = useState(true);
@@ -37,7 +39,7 @@ export function LogsPanel({ run }) {
   const fields = useMemo(() => availableFields(entries), [entries]);
 
   // Time span + buckets over all fired entries (stable axis).
-  const { fullMin, fullMax, buckets, bucketMs, counts, maxCount } = useMemo(() => {
+  const { fullMin, fullMax, bucketMs, counts, maxCount } = useMemo(() => {
     const times = entries.map(tsMs).filter((n) => !Number.isNaN(n));
     const min = times.length ? Math.min(...times) : 0;
     const max = times.length ? Math.max(...times) : 0;
@@ -61,7 +63,7 @@ export function LogsPanel({ run }) {
     return [...windowed].reverse();
   }, [kqlDocs, sel]);
 
-  const toggle = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id) => setExpanded((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const addField = (f) => setQuery((q) => (q.trim() ? `${q.trim()} and ${f}:` : `${f}:`));
 
   const onUp = () => {
@@ -76,50 +78,63 @@ export function LogsPanel({ run }) {
     return true;
   };
 
-  const Title = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-      <Icon name="ScrollText" size={18} style={{ color: 'var(--text-secondary)' }} />
-      <div>
-        <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Logs · Discover</h2>
-        <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>Search with KQL · brush the histogram to filter by time{run.status === 'PAUSED' ? ' · paused' : ''}</div>
-      </div>
-    </div>
+  const mono = { fontFamily: token.fontFamilyCode, fontSize: 12 };
+  const header = (
+    <PanelHeader
+      icon={<FileSearchOutlined />}
+      title="Logs · Discover"
+      sub={`Search with KQL · brush the histogram to filter by time${run.status === 'PAUSED' ? ' · paused' : ''}`}
+    />
   );
 
   if (run.status === 'NONE') {
-    return <div>{Title}<AC.Card><div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-tertiary)', fontSize: 13 }}><Icon name="ScrollText" size={16} /> Press <strong style={{ color: 'var(--text-secondary)' }}>Run scenario</strong> to begin the log feed.</div></AC.Card></div>;
+    return <div>{header}<NotRunningCard label="log" /></div>;
   }
+
+  const columns = [
+    { title: 'Time', dataIndex: 'ts', key: 'ts', width: 200, render: (v) => <Text type="secondary" style={mono}>{v}</Text> },
+    { title: 'host.name', dataIndex: 'host', key: 'host', width: 140, ellipsis: true, render: (v) => <Text style={{ ...mono, color: token.colorPrimary }}>{v || '—'}</Text> },
+    { title: 'event.action', dataIndex: 'action', key: 'action', width: 160, ellipsis: true, render: (v) => <Text style={mono}>{v || '—'}</Text> },
+    { title: 'message', dataIndex: 'message', key: 'message', ellipsis: true, render: (v) => <Text style={mono}>{v}</Text> },
+  ];
 
   return (
     <div>
-      {Title}
+      {header}
 
       {/* KQL query bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid ' + (error ? 'var(--status-danger, #ef4444)' : 'var(--border-default)') }}>
-          <Icon name="Search" size={15} style={{ color: 'var(--text-tertiary)' }} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={'event.action:process_start and host.name:win-ep-04'} spellCheck={false}
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 13 }} />
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--surface-raised)', padding: '2px 6px', borderRadius: 4 }}>KQL</span>
-          {query && <AC.IconButton label="Clear" onClick={() => setQuery('')}><Icon name="X" size={14} /></AC.IconButton>}
-        </div>
-        <AC.IconButton label={showFields ? 'Hide fields' : 'Show fields'} onClick={() => setShowFields((v) => !v)}><Icon name="Columns3" size={16} /></AC.IconButton>
-      </div>
+      <Flex gap={8} style={{ marginBottom: 12 }}>
+        <Input
+          size="large"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="event.action:process_start and host.name:win-ep-04"
+          spellCheck={false}
+          allowClear
+          status={error ? 'error' : undefined}
+          prefix={<SearchOutlined style={{ color: token.colorTextTertiary }} />}
+          suffix={<Tag style={{ marginInlineEnd: 0 }}>KQL</Tag>}
+          style={{ fontFamily: token.fontFamilyCode, fontSize: 13 }}
+        />
+        <Tooltip title={showFields ? 'Hide fields' : 'Show fields'}>
+          <Button size="large" icon={<UnorderedListOutlined />} type={showFields ? 'default' : 'dashed'} onClick={() => setShowFields((v) => !v)} />
+        </Tooltip>
+      </Flex>
 
       {/* Histogram (graph timeline) + time controller */}
-      <AC.Card>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-            {error ? <span style={{ color: 'var(--status-danger, #ef4444)' }}>{error}</span> : <><strong style={{ color: 'var(--text-secondary)' }}>{docs.length}</strong> hits</>}
-          </span>
+      <Card size="small">
+        <Flex align="center" justify="space-between" style={{ marginBottom: 8 }}>
+          {error
+            ? <Text type="danger" style={{ fontSize: 12 }}>{error}</Text>
+            : <Text type="secondary" style={{ fontSize: 12 }}><Text strong>{docs.length}</Text> hits</Text>}
           {sel ? (
-            <button onClick={() => setSel(null)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--accent-subtle-bg, rgba(124,140,255,0.12))', border: '1px solid var(--accent-subtle-border, rgba(124,140,255,0.3))', borderRadius: 999, padding: '3px 10px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11.5, fontFamily: 'var(--font-mono)' }}>
-              <Icon name="Clock" size={12} /> {hhmmss(sel.start)} → {hhmmss(sel.end)} <Icon name="X" size={12} />
-            </button>
+            <Tag closable onClose={() => setSel(null)} icon={<ClockCircleOutlined />} color="processing" style={mono}>
+              {hhmmss(sel.start)} → {hhmmss(sel.end)}
+            </Tag>
           ) : (
-            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{hhmmss(fullMin)} → {hhmmss(fullMax)}</span>
+            <Text type="secondary" style={mono}>{hhmmss(fullMin)} → {hhmmss(fullMax)}</Text>
           )}
-        </div>
+        </Flex>
         <div
           onMouseUp={onUp}
           onMouseLeave={() => setDrag(null)}
@@ -131,80 +146,88 @@ export function LogsPanel({ run }) {
               onMouseDown={() => setDrag({ a: i, b: i })}
               onMouseEnter={() => setDrag((d) => (d ? { ...d, b: i } : d))}
               title={`${hhmmss(fullMin + i * bucketMs)} · ${c} event${c === 1 ? '' : 's'}`}
-              style={{ flex: 1, minWidth: 2, height: `${Math.max(c ? 6 : 0, (c / maxCount) * 100)}%`, background: inActive(i) ? 'var(--accent, #7c8cff)' : 'var(--border-strong, var(--border-default))', opacity: inActive(i) ? 0.85 : 0.4, borderRadius: '2px 2px 0 0' }}
+              style={{ flex: 1, minWidth: 2, height: `${Math.max(c ? 6 : 0, (c / maxCount) * 100)}%`, background: inActive(i) ? token.colorPrimary : token.colorBorder, opacity: inActive(i) ? 0.85 : 0.6, borderRadius: '2px 2px 0 0' }}
             />
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10.5, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-          <span>{hhmmss(fullMin)}</span>
-          <span>{hhmmss(fullMin + (fullMax - fullMin) / 2)}</span>
-          <span>{hhmmss(fullMax)}</span>
-        </div>
-      </AC.Card>
+        <Flex justify="space-between" style={{ marginTop: 6 }}>
+          <Text type="secondary" style={{ ...mono, fontSize: 11 }}>{hhmmss(fullMin)}</Text>
+          <Text type="secondary" style={{ ...mono, fontSize: 11 }}>{hhmmss(fullMin + (fullMax - fullMin) / 2)}</Text>
+          <Text type="secondary" style={{ ...mono, fontSize: 11 }}>{hhmmss(fullMax)}</Text>
+        </Flex>
+      </Card>
 
-      <div style={{ height: 12 }} />
-
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      <Flex gap={12} align="flex-start" style={{ marginTop: 12 }}>
         {showFields && (
-          <div style={{ width: 180, flex: 'none' }}>
-            <AC.Card padded={false}>
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Fields</div>
-              <div style={{ maxHeight: 460, overflow: 'auto', padding: 6 }}>
-                {fields.map((f) => (
-                  <button key={f} onClick={() => addField(f)} title={`Filter on ${f}`} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '5px 8px', borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-                    <Icon name="Hash" size={11} style={{ color: 'var(--text-tertiary)', flex: 'none' }} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
-                  </button>
-                ))}
-              </div>
-            </AC.Card>
-          </div>
+          <Card size="small" title="Fields" style={{ width: 200, flex: 'none' }} styles={{ body: { padding: 4, maxHeight: 480, overflow: 'auto' } }}>
+            {fields.map((f) => (
+              <Tooltip key={f} title={`Filter on ${f}`} placement="right">
+                <Button type="text" size="small" block icon={<NumberOutlined style={{ color: token.colorTextTertiary }} />} onClick={() => addField(f)}
+                  style={{ justifyContent: 'flex-start', ...mono, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {f}
+                </Button>
+              </Tooltip>
+            ))}
+          </Card>
         )}
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <AC.Card padded={false}>
-            {entries.length === 0 ? (
-              <div style={{ padding: 16, fontSize: 13, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 8 }}><AC.Spinner size={14} /> Monitoring… log events will stream in as they fire.</div>
-            ) : docs.length === 0 ? (
-              <div style={{ padding: 16, fontSize: 13, color: 'var(--text-tertiary)' }}>No events match{sel ? ' in this time window' : ''}.</div>
-            ) : (
-              <div>
-                <div style={{ display: 'flex', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border-default)', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
-                  <span style={{ width: 26 }} /><span style={{ width: 165 }}>Time</span><span>Document</span>
-                </div>
-                {docs.map((e) => {
-                  const id = docId(e);
-                  const open = expanded.has(id);
-                  const doc = ecsDoc(e);
-                  return (
-                    <div key={id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <button onClick={() => toggle(id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer' }}>
-                        <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={13} style={{ color: 'var(--text-tertiary)', flex: 'none', width: 16 }} />
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)', flex: 'none', width: 165 }}>{e.ts}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: 'var(--text-tertiary)' }}>host.name</span>:<span style={{ color: 'var(--accent, #7c8cff)' }}>{e.host}</span>{' '}
-                          <span style={{ color: 'var(--text-tertiary)' }}>event.action</span>:{e.action}{' '}
-                          <span style={{ color: 'var(--text-tertiary)' }}>message</span>:{e.message}
-                        </span>
-                      </button>
-                      {open && (
-                        <div style={{ padding: '4px 12px 12px 38px', display: 'grid', gridTemplateColumns: '180px 1fr', gap: '3px 12px' }}>
-                          {Object.entries(doc).map(([k, v]) => (
-                            <React.Fragment key={k}>
-                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)' }}>{k}</div>
-                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{v === null || v === undefined ? '—' : String(v)}</div>
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </AC.Card>
-        </div>
-      </div>
+        <Card size="small" style={{ flex: 1, minWidth: 0 }} styles={{ body: { padding: 0 } }}>
+          {entries.length === 0 ? (
+            <Flex align="center" gap={8} style={{ padding: 16 }}><Spin size="small" /><Text type="secondary">Monitoring… log events will stream in as they fire.</Text></Flex>
+          ) : (
+            <Table
+              size="small"
+              rowKey={docId}
+              columns={columns}
+              dataSource={docs}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`No events match${sel ? ' in this time window' : ''}.`} /> }}
+              pagination={{ defaultPageSize: 50, showSizeChanger: true, size: 'small', hideOnSinglePage: true }}
+              expandable={{
+                expandedRowKeys: [...expanded],
+                onExpand: (_open, rec) => toggle(docId(rec)),
+                expandRowByClick: true,
+                expandedRowRender: (e) => (
+                  <Descriptions
+                    size="small"
+                    bordered
+                    column={1}
+                    styles={{ label: { ...mono, width: 200 }, content: { ...mono, wordBreak: 'break-all' } }}
+                    items={Object.entries(ecsDoc(e)).map(([k, v]) => ({ key: k, label: k, children: v === null || v === undefined ? '—' : String(v) }))}
+                  />
+                ),
+              }}
+            />
+          )}
+        </Card>
+      </Flex>
     </div>
+  );
+}
+
+/* Shared panel header (icon + title + subtitle + optional right-side extra). */
+export function PanelHeader({ icon, title, sub, extra }) {
+  const { token } = theme.useToken();
+  return (
+    <Flex align="center" gap={12} style={{ marginBottom: 16 }}>
+      <Flex align="center" justify="center" style={{ width: 36, height: 36, borderRadius: token.borderRadius, background: token.colorPrimaryBg, color: token.colorPrimary, fontSize: 17, flex: 'none' }}>{icon}</Flex>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Title level={4} style={{ margin: 0 }}>{title}</Title>
+        {sub && <Text type="secondary" style={{ fontSize: 13 }}>{sub}</Text>}
+      </div>
+      {extra}
+    </Flex>
+  );
+}
+
+/* Shown in feed panels before the run has been started. */
+export function NotRunningCard({ label }) {
+  return (
+    <Card>
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={<span>Press <Text strong>Run scenario</Text> in the bar above to begin the {label} feed.</span>}
+      />
+    </Card>
   );
 }
 

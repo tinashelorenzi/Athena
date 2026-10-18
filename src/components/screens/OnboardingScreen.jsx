@@ -1,55 +1,73 @@
 'use client';
 import React, { useActionState, useState } from 'react';
-import { Button, Input } from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Card, Form, Input, Button, Alert, Flex, Typography, theme } from 'antd';
+import { UserOutlined, LockOutlined, KeyOutlined, ArrowRightOutlined } from '@ant-design/icons';
 
 /* First-login setup for bulk-created students: confirm their name and, if they
-   like, replace the emailed starter password. Shown at /welcome until done. */
+   like, replace the emailed starter password. Shown at /welcome until done.
+   Native <form action> wrapping antd inputs (by `name`) keeps the server-action
+   flow unchanged. */
 export function OnboardingScreen({ action, email, defaultName }) {
+  const { token } = theme.useToken();
   const [state, formAction, pending] = useActionState(action, {});
   const [setPw, setSetPw] = useState(false);
+  const iconStyle = { color: token.colorTextTertiary };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: 'var(--surface-app)', position: 'relative', overflow: 'hidden' }}>
-      <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'radial-gradient(90% 60% at 50% -10%, var(--brand-subtle-bg), transparent 70%)' }} />
-      <div style={{ position: 'relative', width: '100%', maxWidth: 420, background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 16, boxShadow: 'var(--shadow-lg)', padding: 30 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+    <Flex
+      align="center"
+      justify="center"
+      style={{ minHeight: '100vh', padding: 24, background: `radial-gradient(90% 60% at 50% -10%, rgba(53,56,212,0.12), transparent 70%), ${token.colorBgLayout}` }}
+    >
+      <Card style={{ width: '100%', maxWidth: 440, boxShadow: token.boxShadowSecondary }} styles={{ body: { padding: 30 } }}>
+        <Flex align="center" gap={10} style={{ marginBottom: 18 }}>
           <img src="/logo_img_white_background.png" alt="" style={{ height: 30, borderRadius: 6 }} />
-          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Athena</span>
-        </div>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#2326B8', letterSpacing: '-0.01em' }}>Athena</span>
+        </Flex>
 
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px', letterSpacing: '-0.02em' }}>Welcome — let’s finish setup</h1>
-        <p style={{ fontSize: 13.5, color: 'var(--text-tertiary)', margin: '0 0 22px', lineHeight: 1.55 }}>
-          Signing in as <strong style={{ color: 'var(--text-secondary)' }}>{email}</strong>. Set your name and you’re into the lab.
-        </p>
+        <Typography.Title level={3} style={{ margin: '0 0 6px' }}>Welcome — let’s finish setup</Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 22 }}>
+          Signing in as <Typography.Text strong>{email}</Typography.Text>. Set your name and you’re into the lab.
+        </Typography.Paragraph>
 
-        <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Input label="Full name" name="name" defaultValue={defaultName || ''} placeholder="e.g. Amara Okafor" required autoFocus leadingIcon={<Icon name="User" size={16} />} />
+        <form action={formAction}>
+          <Form layout="vertical" component={false} requiredMark={false}>
+            <Form.Item label="Full name" htmlFor="onb-name">
+              <Input id="onb-name" name="name" defaultValue={defaultName || ''} placeholder="e.g. Amara Okafor" required autoFocus size="large" prefix={<UserOutlined style={iconStyle} />} />
+            </Form.Item>
 
-          {setPw ? (
-            <>
-              <Input label="New password" name="password" type="password" placeholder="At least 10 characters" autoComplete="new-password" leadingIcon={<Icon name="Lock" size={16} />} />
-              <Input label="Confirm password" name="confirmPassword" type="password" placeholder="Repeat it" autoComplete="new-password" leadingIcon={<Icon name="Lock" size={16} />} />
-              <button type="button" onClick={() => setSetPw(false)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-tertiary)', fontSize: 12.5 }}>Keep my current password</button>
-            </>
-          ) : (
-            <button type="button" onClick={() => setSetPw(true)} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-link)', fontSize: 12.5, fontWeight: 600 }}>
-              <Icon name="KeyRound" size={14} /> Set a new password (optional)
-            </button>
-          )}
+            {setPw && (
+              <>
+                <Form.Item label="New password" htmlFor="onb-password">
+                  <Input.Password id="onb-password" name="password" placeholder="At least 10 characters" autoComplete="new-password" size="large" prefix={<LockOutlined style={iconStyle} />} />
+                </Form.Item>
+                <Form.Item label="Confirm password" htmlFor="onb-confirm">
+                  <Input.Password id="onb-confirm" name="confirmPassword" placeholder="Repeat it" autoComplete="new-password" size="large" prefix={<LockOutlined style={iconStyle} />} />
+                </Form.Item>
+              </>
+            )}
+          </Form>
 
-          {state?.error && (
-            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
-              <Icon name="TriangleAlert" size={15} /> {state.error}
-            </div>
-          )}
+          <Flex vertical gap={16}>
+            {setPw ? (
+              <Button type="link" htmlType="button" size="small" onClick={() => setSetPw(false)} style={{ alignSelf: 'flex-start', padding: 0, color: token.colorTextTertiary }}>
+                Keep my current password
+              </Button>
+            ) : (
+              <Button type="link" htmlType="button" size="small" icon={<KeyOutlined />} onClick={() => setSetPw(true)} style={{ alignSelf: 'flex-start', padding: 0, fontWeight: 600 }}>
+                Set a new password (optional)
+              </Button>
+            )}
 
-          <Button type="submit" variant="primary" size="lg" block loading={pending} trailingIcon={<Icon name="ArrowRight" size={16} />}>
-            {pending ? 'Saving' : 'Enter the lab'}
-          </Button>
+            {state?.error && <Alert type="error" showIcon role="alert" title={state.error} />}
+
+            <Button type="primary" htmlType="submit" size="large" block loading={pending} icon={<ArrowRightOutlined />} iconPlacement="end">
+              {pending ? 'Saving' : 'Enter the lab'}
+            </Button>
+          </Flex>
         </form>
-      </div>
-    </div>
+      </Card>
+    </Flex>
   );
 }
 

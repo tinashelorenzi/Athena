@@ -1,15 +1,22 @@
 'use client';
 import React, { useState } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import {
+  Alert, Button, Card, Descriptions, Drawer, Flex, Form, InputNumber, List, Space, Tag, Typography, theme,
+} from 'antd';
+import {
+  LockOutlined, UnlockOutlined, EyeInvisibleOutlined, EyeOutlined, SendOutlined, CheckCircleFilled,
+  CloseCircleFilled, FileTextOutlined, DownloadOutlined, ThunderboltOutlined, EditOutlined,
+} from '@ant-design/icons';
 import { gradeSubmission, setGradeReleased, setSubmissionCommitted } from '@/app/actions/grading';
 import { RichTextEditor } from '@/components/RichText';
+import { FormLayout } from '../settings/parts';
 
 /* Review a student's submission: see flag correctness + report, set/amend a
    grade + feedback, then release it to the student (or hold it). Shared by the
    cross-cohort grading queue and the per-cohort grading tab. Key this by the
    submission id at the call site so it re-initialises per submission. */
 export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
+  const { token } = theme.useToken();
   // Prefill with the committed grade if graded, else the flag auto-mark. The
   // instructor validates/overrides before releasing.
   const initialGrade = submission?.grade != null ? submission.grade : submission?.autoGrade;
@@ -46,93 +53,132 @@ export function GradeReviewDialog({ submission, onClose, onError, onDone }) {
     finish();
   };
 
-  return (
-    <AC.Dialog
-      open
-      size="lg"
-      title={`Review — ${submission.studentName}`}
-      description={`${submission.scenarioTitle}${submission.cohortName ? ` · ${submission.cohortName}` : ''}`}
-      icon={<Icon name="PenLine" size={18} />}
-      onClose={onClose}
-      footer={<>
-        <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
-        {!committed && (
-          <AC.Button variant="secondary" loading={busy} leadingIcon={<Icon name="Lock" size={14} />} onClick={() => setCommitted(true)}>Commit for grading</AC.Button>
-        )}
-        {committed && !released && (
-          <AC.Button variant="ghost" loading={busy} leadingIcon={<Icon name="LockOpen" size={14} />} onClick={() => setCommitted(false)}>Re-open</AC.Button>
-        )}
-        {graded && released && (
-          <AC.Button variant="secondary" loading={busy} leadingIcon={<Icon name="EyeOff" size={14} />} onClick={() => toggleRelease(false)}>Hold</AC.Button>
-        )}
-        <AC.Button variant="secondary" loading={busy} onClick={() => save(false)}>Save (hold)</AC.Button>
-        <AC.Button variant="primary" loading={busy} leadingIcon={<Icon name="Send" size={14} />} onClick={() => save(true)}>{released ? 'Save & keep released' : 'Save & release'}</AC.Button>
-      </>}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: committed ? 'var(--text-tertiary)' : 'var(--status-warning, #a9770a)' }}>
-          <Icon name={committed ? 'Lock' : 'PencilLine'} size={14} />
-          {committed ? 'Committed — locked for grading; the student can’t change it.' : 'Open — the student can still re-do this. Grading or “Commit for grading” locks it.'}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-tertiary)' }}>
-          <Icon name={released ? 'Eye' : 'EyeOff'} size={14} />
-          {released ? 'Released — the student can see this grade.' : graded ? 'Graded but held — the student cannot see it yet.' : 'Not graded yet — the student sees “awaiting grading”.'}
-        </div>
+  const flags = submission.flagReview || [];
+  const correct = flags.filter((f) => f.correct).length;
 
-        {submission.flagReview?.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
-              Flag answers · {submission.flagReview.filter((f) => f.correct).length}/{submission.flagReview.length} correct
-            </div>
-            {submission.flagReview.map((f, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)' }}>
-                <Icon name={f.correct ? 'CircleCheck' : 'CircleX'} size={15} style={{ color: f.correct ? 'var(--status-success, #22c55e)' : 'var(--status-danger, #ef4444)', flex: 'none' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>{f.question}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{f.answer || '— no answer —'}</div>
-                </div>
-                {f.points ? <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{f.points}p</span> : null}
-              </div>
-            ))}
-          </div>
+  return (
+    <Drawer
+      open
+      size={720}
+      title={`Review — ${submission.studentName}`}
+      onClose={onClose}
+      destroyOnHidden
+      footer={
+        <Flex justify="flex-end" gap={8} wrap>
+          <Button onClick={onClose}>Cancel</Button>
+          {!committed && (
+            <Button loading={busy} icon={<LockOutlined />} onClick={() => setCommitted(true)}>Commit for grading</Button>
+          )}
+          {committed && !released && (
+            <Button type="text" loading={busy} icon={<UnlockOutlined />} onClick={() => setCommitted(false)}>Re-open</Button>
+          )}
+          {graded && released && (
+            <Button loading={busy} icon={<EyeInvisibleOutlined />} onClick={() => toggleRelease(false)}>Hold</Button>
+          )}
+          <Button loading={busy} onClick={() => save(false)}>Save (hold)</Button>
+          <Button type="primary" loading={busy} icon={<SendOutlined />} onClick={() => save(true)}>{released ? 'Save & keep released' : 'Save & release'}</Button>
+        </Flex>
+      }
+    >
+      <Flex vertical gap={16}>
+        <Descriptions
+          size="small"
+          bordered
+          column={{ xs: 1, sm: 2 }}
+          items={[
+            { key: 'scenario', label: 'Scenario', children: submission.scenarioTitle, span: 2 },
+            ...(submission.cohortName ? [{ key: 'cohort', label: 'Cohort', children: submission.cohortName }] : []),
+            { key: 'submitted', label: 'Submitted', children: String(submission.submitted || '').slice(0, 10) },
+            {
+              key: 'lock', label: 'Lock',
+              children: committed ? <Tag icon={<LockOutlined />} color="default">Committed</Tag> : <Tag icon={<EditOutlined />} color="warning">Open for re-do</Tag>,
+            },
+            {
+              key: 'vis', label: 'Visibility',
+              children: released
+                ? <Tag icon={<EyeOutlined />} color="success">Released</Tag>
+                : graded ? <Tag icon={<EyeInvisibleOutlined />} color="purple">Held</Tag> : <Tag>Not graded</Tag>,
+            },
+          ]}
+        />
+
+        <Alert
+          type={committed ? 'info' : 'warning'}
+          showIcon
+          title={committed ? 'Committed — locked for grading; the student can’t change it.' : 'Open — the student can still re-do this. Grading or “Commit for grading” locks it.'}
+          description={released ? 'Released — the student can see this grade.' : graded ? 'Graded but held — the student cannot see it yet.' : 'Not graded yet — the student sees “awaiting grading”.'}
+        />
+
+        {flags.length > 0 && (
+          <Card size="small" title="Flag answers" extra={<Tag color={correct === flags.length ? 'success' : 'default'}>{correct}/{flags.length} correct</Tag>}>
+            <List
+              size="small"
+              split
+              dataSource={flags}
+              renderItem={(f, i) => (
+                <List.Item key={i} extra={f.points ? <Typography.Text type="secondary">{f.points}p</Typography.Text> : null}>
+                  <List.Item.Meta
+                    avatar={f.correct
+                      ? <CheckCircleFilled style={{ color: token.colorSuccess, fontSize: 16 }} />
+                      : <CloseCircleFilled style={{ color: token.colorError, fontSize: 16 }} />}
+                    title={f.question}
+                    description={f.answer ? <Typography.Text code>{f.answer}</Typography.Text> : <Typography.Text type="secondary" italic>— no answer —</Typography.Text>}
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
         )}
 
         {(submission.report || submission.reportFileName) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Report</div>
-            {submission.reportFileName && (
-              <a href={`/api/submissions/${submission.id}/report`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)' }}>
-                  <Icon name="FileText" size={16} style={{ color: 'var(--accent, #7c8cff)', flex: 'none' }} />
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{submission.reportFileName}</span>
-                  <Icon name="Download" size={15} style={{ color: 'var(--text-tertiary)', flex: 'none' }} />
+          <Card size="small" title="Report">
+            <Flex vertical gap={8}>
+              {submission.reportFileName && (
+                <Flex align="center" gap={8}>
+                  <FileTextOutlined style={{ color: token.colorPrimary }} />
+                  <Typography.Text ellipsis style={{ flex: 1, minWidth: 0 }}>{submission.reportFileName}</Typography.Text>
+                  <a href={`/api/submissions/${submission.id}/report`} target="_blank" rel="noreferrer">
+                    <Button size="small" icon={<DownloadOutlined />}>Download</Button>
+                  </a>
+                </Flex>
+              )}
+              {submission.report && (
+                <div style={{ maxHeight: 220, overflow: 'auto', padding: '10px 12px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, whiteSpace: 'pre-wrap', lineHeight: 1.55, color: token.colorTextSecondary }}>
+                  {submission.report}
                 </div>
-              </a>
-            )}
-            {submission.report && (
-              <div style={{ maxHeight: 200, overflow: 'auto', padding: '10px 12px', borderRadius: 6, background: 'var(--surface-inset)', border: '1px solid var(--border-subtle)', fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{submission.report}</div>
-            )}
-          </div>
+              )}
+            </Flex>
+          </Card>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <AC.Input label="Grade (0–100)" type="number" min={0} max={100} value={grade} onChange={(e) => setGrade(e.target.value)} leadingIcon={<Icon name="Hash" size={16} />} />
-          {hasAuto && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
-              <Icon name="Sparkles" size={13} style={{ color: 'var(--accent)' }} />
-              <span>Auto-marked from flags: <strong style={{ color: 'var(--text-secondary)' }}>{submission.autoBasis}</strong> → suggests <strong style={{ color: 'var(--text-secondary)' }}>{submission.autoGrade}/100</strong>.</span>
-              {String(submission.autoGrade) !== grade && (
-                <button type="button" onClick={() => setGrade(String(submission.autoGrade))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-link)', fontSize: 12, fontWeight: 600 }}>Use</button>
-              )}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Feedback {released ? '(updates what the student sees)' : '(shown to the student on release)'}</label>
-          <RichTextEditor value={feedback} onChange={setFeedback} />
-        </div>
-      </div>
-    </AC.Dialog>
+        <FormLayout>
+          <Form.Item
+            label="Grade (0–100)"
+            extra={hasAuto ? (
+              <Space size={6} wrap>
+                <ThunderboltOutlined style={{ color: token.colorPrimary }} />
+                <span>Auto-marked from flags: <Typography.Text strong>{submission.autoBasis}</Typography.Text> → suggests <Typography.Text strong>{submission.autoGrade}/100</Typography.Text>.</span>
+                {String(submission.autoGrade) !== grade && (
+                  <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setGrade(String(submission.autoGrade))}>Use</Button>
+                )}
+              </Space>
+            ) : null}
+          >
+            <InputNumber
+              min={0}
+              max={100}
+              value={grade === '' ? null : Number(grade)}
+              onChange={(v) => setGrade(v == null ? '' : String(v))}
+              suffix="/ 100"
+              style={{ width: 180 }}
+            />
+          </Form.Item>
+          <Form.Item label={`Feedback ${released ? '(updates what the student sees)' : '(shown to the student on release)'}`}>
+            <RichTextEditor value={feedback} onChange={setFeedback} />
+          </Form.Item>
+        </FormLayout>
+      </Flex>
+    </Drawer>
   );
 }
 

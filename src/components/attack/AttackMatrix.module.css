@@ -1,0 +1,115 @@
+/* ATT&CK matrix grid: one column per tactic, technique cells stacked below.
+   Colours come from antd's CSS variables (prefix `ath`, see antdTheme.js). */
+.scroller {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.grid {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: max-content;
+}
+
+.column {
+  width: 196px;
+  flex: none;
+}
+
+.columnHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 10px 8px;
+  margin-bottom: 8px;
+  background: var(--ath-color-bg-container);
+  border: 1px solid var(--ath-color-border-secondary);
+  border-top: 3px solid var(--ath-color-primary);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.columnHead:hover { border-color: var(--ath-color-primary-border); border-top-color: var(--ath-color-primary); }
+
+.columnTitle {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--ath-color-text);
+}
+
+.columnMeta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ath-color-text-tertiary);
+}
+
+.cells {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cell {
+  display: flex;
+  align-items: stretch;
+  background: var(--ath-color-bg-container);
+  border: 1px solid var(--ath-color-border-secondary);
+  border-radius: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cell:hover { border-color: var(--ath-color-primary); box-shadow: 0 1px 4px rgba(53, 56, 212, 0.12); }
+.cellStudied { border-left: 3px solid var(--ath-color-success); }
+.cellMatch { background: var(--ath-color-primary-bg); border-color: var(--ath-color-primary-border); }
+
+.cellMain {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.cellName {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--ath-color-text);
+}
+
+.cellId {
+  margin-top: 2px;
+  font-family: var(--ath-font-family-code);
+  font-size: 10.5px;
+  color: var(--ath-color-text-tertiary);
+}
+
+.subToggle {
+  flex: none;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 0;
+  border-left: 1px solid var(--ath-color-border-secondary);
+  background: var(--ath-color-fill-quaternary);
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--ath-color-text-secondary);
+}
+.subToggle:hover { background: var(--ath-color-primary-bg); color: var(--ath-color-primary); }
+
+.subs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -2px 0 2px 12px;
+  padding-left: 8px;
+  border-left: 2px solid var(--ath-color-primary-border);
+}

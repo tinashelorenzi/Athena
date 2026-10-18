@@ -1,19 +1,23 @@
 'use client';
 import React, { useState, useTransition } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Alert, App, Button, Card, Empty, Flex, Form, Input, Modal, Popconfirm, Table, Typography, theme } from 'antd';
+import { ApiOutlined, PlusOutlined, DeleteOutlined, CodeOutlined, TagOutlined, KeyOutlined } from '@ant-design/icons';
 import { createApiKey, revokeApiKey } from '@/app/actions/apikeys';
-import { SectionHeader } from './parts';
+import { SectionHeader, FormLayout } from './parts';
+
+const CURL = `curl -H "Authorization: Bearer ath_..." \\
+  https://<your-athena-host>/api/v1/ping`;
 
 /* API key management. Keys are shown once on creation; only their hash is
    stored. They authenticate requests to /api/v1/* (see GET /api/v1/ping). */
 export function ApiAccessSection({ apiKeys }) {
+  const { message } = App.useApp();
+  const { token } = theme.useToken();
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState(null);
   const [creating, startCreate] = useTransition();
   const [revealed, setRevealed] = useState(null); // { name, key }
   const [busyId, setBusyId] = useState(null);
-  const [error, setError] = useState(null);
 
   const openCreate = () => { setCreateError(null); setCreateOpen(true); };
 
@@ -32,113 +36,95 @@ export function ApiAccessSection({ apiKeys }) {
   };
 
   const onRevoke = async (k) => {
-    setError(null);
     setBusyId(k.id);
     const res = await revokeApiKey(k.id);
     setBusyId(null);
-    if (res?.error) setError(res.error);
+    if (res?.error) message.error(res.error);
   };
 
+  const columns = [
+    { title: 'Name', dataIndex: 'name', key: 'name', render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+    { title: 'Key', dataIndex: 'prefix', key: 'prefix', render: (v) => <Typography.Text code>{v}…</Typography.Text> },
+    { title: 'Created', dataIndex: 'created', key: 'created', width: 120, sorter: (a, b) => a.created.localeCompare(b.created) },
+    { title: 'Last used', dataIndex: 'lastUsed', key: 'lastUsed', width: 120 },
+    {
+      title: '', key: 'actions', width: 110, align: 'right',
+      render: (_v, row) => (
+        <Popconfirm
+          title="Revoke this key?"
+          description="Integrations using it will stop working immediately."
+          okText="Revoke"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => onRevoke(row)}
+        >
+          <Button danger size="small" loading={busyId === row.id} icon={<DeleteOutlined />}>Revoke</Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error && <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />}
-
-      <AC.Card
-        header={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-            <div style={{ flex: 1 }}><SectionHeader icon="KeySquare" title="API keys" subtitle="Let other applications integrate with Athena." /></div>
-            <AC.Button variant="primary" size="sm" leadingIcon={<Icon name="Plus" size={14} />} onClick={openCreate}>Generate key</AC.Button>
-          </div>
-        }
-        padded={false}
+    <Flex vertical gap={16}>
+      <Card
+        title={<SectionHeader icon={<ApiOutlined />} title="API keys" subtitle="Let other applications integrate with Athena." />}
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>Generate key</Button>}
+        styles={{ body: { padding: 0 } }}
       >
-        {apiKeys.length === 0 ? (
-          <div style={{ padding: 8 }}>
-            <AC.EmptyState icon={<Icon name="KeySquare" size={24} />} title="No API keys" description="Generate a key to let an external app call the Athena API." actions={<AC.Button variant="primary" size="sm" onClick={openCreate}>Generate key</AC.Button>} />
-          </div>
-        ) : (
-          <AC.Table
-            rowKey="id"
-            hover={false}
-            columns={[
-              { key: 'name', header: 'Name', primary: true },
-              { key: 'prefix', header: 'Key', mono: true, render: (v) => `${v}…` },
-              { key: 'created', header: 'Created', mono: true, width: '120px' },
-              { key: 'lastUsed', header: 'Last used', mono: true, width: '130px' },
-              {
-                key: 'id', header: '', width: '110px', align: 'right',
-                render: (_v, row) => (
-                  <AC.Button variant="outline-danger" size="sm" loading={busyId === row.id} leadingIcon={<Icon name="Trash2" size={14} />} onClick={() => onRevoke(row)}>Revoke</AC.Button>
-                ),
-              },
-            ]}
-            rows={apiKeys}
-          />
-        )}
-      </AC.Card>
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={apiKeys}
+          pagination={false}
+          locale={{ emptyText: <Empty description="No API keys — generate one to let an external app call the Athena API." /> }}
+        />
+      </Card>
 
-      <AC.Card header={<SectionHeader icon="Terminal" title="Using a key" subtitle="Send it as a Bearer token." />}>
-        <pre style={{ margin: 0, padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text-secondary)', overflow: 'auto' }}>
-{`curl -H "Authorization: Bearer ath_..." \\
-  https://<your-athena-host>/api/v1/ping`}
-        </pre>
-      </AC.Card>
+      <Card title={<SectionHeader icon={<CodeOutlined />} title="Using a key" subtitle="Send it as a Bearer token." />}>
+        <Flex align="flex-start" gap={8}>
+          <pre style={{ flex: 1, margin: 0, padding: '12px 14px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, fontFamily: token.fontFamilyCode, fontSize: 12.5, color: token.colorTextSecondary, overflow: 'auto' }}>{CURL}</pre>
+          <Typography.Text copyable={{ text: CURL }} />
+        </Flex>
+      </Card>
 
       {/* Generate dialog */}
-      <AC.Dialog
+      <Modal
         open={createOpen}
         title="Generate API key"
-        description="Name the key so you know which integration it belongs to."
-        icon={<Icon name="KeySquare" size={18} />}
-        onClose={() => setCreateOpen(false)}
+        onCancel={() => setCreateOpen(false)}
+        destroyOnHidden
+        okText="Generate"
+        okButtonProps={{ htmlType: 'submit', form: 'api-key-create', icon: <PlusOutlined /> }}
+        confirmLoading={creating}
       >
-        <form onSubmit={onCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <AC.Input label="Key name" name="name" placeholder="e.g. Grafana integration" required leadingIcon={<Icon name="Tag" size={16} />} />
-          {createError && (
-            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
-              <Icon name="TriangleAlert" size={15} /> {createError}
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <AC.Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</AC.Button>
-            <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="Plus" size={14} />}>Generate</AC.Button>
-          </div>
+        <Typography.Paragraph type="secondary">Name the key so you know which integration it belongs to.</Typography.Paragraph>
+        <form id="api-key-create" onSubmit={onCreateSubmit}>
+          <FormLayout>
+            <Form.Item label="Key name" required>
+              <Input name="name" placeholder="e.g. Grafana integration" required prefix={<TagOutlined />} autoFocus />
+            </Form.Item>
+          </FormLayout>
+          {createError && <Alert type="error" showIcon title={createError} />}
         </form>
-      </AC.Dialog>
+      </Modal>
 
       {/* Reveal-once dialog */}
-      <RevealKeyDialog key={revealed ? revealed.key : 'none'} revealed={revealed} onClose={() => setRevealed(null)} />
-    </div>
-  );
-}
-
-function RevealKeyDialog({ revealed, onClose }) {
-  const [copied, setCopied] = useState(false);
-  if (!revealed) return null;
-
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(revealed.key); setCopied(true); } catch { /* blocked */ }
-  };
-
-  return (
-    <AC.Dialog
-      open
-      title="API key created"
-      description="Copy this key now — it is shown only once and cannot be recovered."
-      icon={<Icon name="KeyRound" size={18} />}
-      onClose={onClose}
-      footer={
-        <>
-          <AC.Button variant="secondary" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copy}>{copied ? 'Copied' : 'Copy key'}</AC.Button>
-          <AC.Button variant="primary" onClick={onClose}>Done</AC.Button>
-        </>
-      }
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
-        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>{revealed.name}</div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{revealed.key}</div>
-      </div>
-    </AC.Dialog>
+      <Modal
+        open={!!revealed}
+        title={<Flex align="center" gap={8}><KeyOutlined />API key created</Flex>}
+        onCancel={() => setRevealed(null)}
+        destroyOnHidden
+        footer={<Button type="primary" onClick={() => setRevealed(null)}>Done</Button>}
+      >
+        {revealed && (
+          <Flex vertical gap={12}>
+            <Alert type="warning" showIcon title="Copy this key now — it is shown only once and cannot be recovered." />
+            <Card size="small" title={revealed.name}>
+              <Typography.Text code copyable={{ text: revealed.key, tooltips: ['Copy key', 'Copied'] }} style={{ wordBreak: 'break-all' }}>{revealed.key}</Typography.Text>
+            </Card>
+          </Flex>
+        )}
+      </Modal>
+    </Flex>
   );
 }
 

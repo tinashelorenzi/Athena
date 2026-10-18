@@ -1,11 +1,11 @@
 'use client';
 import React, { useActionState } from 'react';
 import Link from 'next/link';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Button, Card, Flex } from 'antd';
+import { CheckOutlined } from '@ant-design/icons';
 import { createScenario } from '@/app/actions/scenarios';
 import { ScenarioFields } from './scenarios/ScenarioFields';
-import { FormStatus } from './settings/parts';
+import { FormStatus, Page } from './settings/parts';
 
 /* New scenario authoring form. On success the action redirects to the new
    scenario's detail page (where endpoints/artifacts are added). */
@@ -13,25 +13,25 @@ export function ScenarioForm() {
   const [state, action, saving] = useActionState(createScenario, {});
 
   return (
-    <div style={{ padding: 24, maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Link href="/admin/scenarios" style={{ textDecoration: 'none' }}>
-          <AC.IconButton label="Back"><Icon name="ArrowLeft" size={18} /></AC.IconButton>
-        </Link>
-        <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>New scenario</h2>
-      </div>
-
-      <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <ScenarioFields mode="create" />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, padding: '4px 2px 24px' }}>
-          <FormStatus state={state} />
-          <Link href="/admin/scenarios" style={{ textDecoration: 'none' }}>
-            <AC.Button type="button" variant="ghost">Cancel</AC.Button>
-          </Link>
-          <AC.Button type="submit" variant="primary" loading={saving} leadingIcon={<Icon name="Check" size={14} />}>Create scenario</AC.Button>
-        </div>
+    <Page
+      back="/admin/scenarios"
+      title="New scenario"
+      description="Author a Dojo (teaching) or Assessment (graded) scenario. Endpoints and the learning guide are added after creating."
+      maxWidth={960}
+    >
+      <form action={action}>
+        <Flex vertical gap={16}>
+          <ScenarioFields mode="create" />
+          <Card size="small">
+            <Flex align="center" justify="flex-end" gap={12} wrap>
+              <div style={{ flex: 1, minWidth: 200 }}><FormStatus state={state} /></div>
+              <Link href="/admin/scenarios"><Button>Cancel</Button></Link>
+              <Button type="primary" htmlType="submit" loading={saving} icon={<CheckOutlined />}>Create scenario</Button>
+            </Flex>
+          </Card>
+        </Flex>
       </form>
-    </div>
+    </Page>
   );
 }
 

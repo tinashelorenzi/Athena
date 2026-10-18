@@ -1,6 +1,7 @@
 /* Athena Design System — barrel export.
-   Re-exports every ported primitive so screens can import from
-   a single path: `import { Button, Table, SeverityBadge } from '@/components/ds'`. */
+   Each primitive is a thin wrapper over the matching Ant Design component that
+   keeps the original DS props API, so screens can still import from a single
+   path: `import { Button, Table, SeverityBadge } from '@/components/ds'`. */
 
 // forms
 export * from './Button';
@@ -24,6 +25,7 @@ export * from './Table';
 export * from './Tabs';
 export * from './SidebarNav';
 export * from './Breadcrumb';
+export * from './PageHeader';
 
 // feedback
 export * from './Spinner';

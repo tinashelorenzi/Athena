@@ -1,19 +1,24 @@
 'use client';
 import React, { useState } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { Modal, Descriptions, Radio, Input, Select, Button, Switch, Flex, Typography, Tag, Divider, Empty, Space, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, CheckOutlined, AlertOutlined } from '@ant-design/icons';
 import { saveAlertCase } from '@/app/actions/cases';
+import { athenaTheme } from '@/theme/antdTheme';
 
-const VERDICTS = [
-  { id: 'TRUE_POSITIVE', label: 'True Positive', tone: 'danger' },
-  { id: 'FALSE_POSITIVE', label: 'False Positive', tone: 'neutral' },
-  { id: 'BENIGN', label: 'Benign', tone: 'success' },
-  { id: 'ESCALATED', label: 'Escalated', tone: 'warning' },
+const { Text } = Typography;
+
+export const VERDICTS = [
+  { id: 'TRUE_POSITIVE', label: 'True Positive', short: 'TP', color: 'red' },
+  { id: 'FALSE_POSITIVE', label: 'False Positive', short: 'FP', color: 'default' },
+  { id: 'BENIGN', label: 'Benign', short: 'Benign', color: 'green' },
+  { id: 'ESCALATED', label: 'Escalated', short: 'Esc', color: 'orange' },
 ];
 const IOC_TYPES = ['ip', 'domain', 'url', 'hash', 'email', 'other'];
+const mono = { fontFamily: athenaTheme.token.fontFamilyCode };
 
-/* Per-alert case editor: verdict, notes, IoCs, open/closed. Saves to the DB and
-   reports the new state back so the alerts table updates without a reload. */
+/* Per-alert case editor: alert detail, verdict, notes, IoCs, open/closed. Saves
+   to the DB and reports the new state back so the alert queue updates without a
+   reload. */
 export function AlertCaseDialog({ alert, caseData, scenarioId, onClose, onSaved, onError, preview }) {
   const [verdict, setVerdict] = useState(caseData?.verdict ?? null);
   const [status, setStatus] = useState(caseData?.status ?? 'OPEN');
@@ -37,76 +42,89 @@ export function AlertCaseDialog({ alert, caseData, scenarioId, onClose, onSaved,
     onClose();
   };
 
+  const extra = alert.fields && typeof alert.fields === 'object' ? Object.entries(alert.fields) : [];
+  const detail = [
+    { key: 'id', label: 'Alert ID', children: <Text style={mono} copyable>{alert.id}</Text> },
+    { key: 'seek', label: 'Fired', children: <Text style={mono}>T+{alert.seek ?? alert.at ?? 0}s</Text> },
+    { key: 'host', label: 'Host', children: alert.host ? <Text style={mono} copyable>{alert.host}</Text> : '—' },
+    { key: 'rule', label: 'Rule', children: alert.rule ? <Tag color="geekblue" style={mono}>{alert.rule}</Tag> : '—' },
+    { key: 'src', label: 'Source', children: alert.source ? <Text style={mono} copyable>{alert.source}</Text> : '—' },
+    { key: 'dst', label: 'Destination', children: alert.destination ? <Text style={mono} copyable>{alert.destination}</Text> : '—' },
+    { key: 'count', label: 'Events', children: <Text style={mono}>{alert.count ?? '—'}</Text> },
+    ...extra.map(([k, v]) => ({
+      key: `f:${k}`, label: k,
+      children: <Text style={{ ...mono, wordBreak: 'break-all' }}>{v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v)}</Text>,
+    })),
+  ];
+
   return (
-    <AC.Dialog
+    <Modal
       open
-      size="lg"
-      title={`Case · ${alert.title || alert.id}`}
-      description={`${alert.host || ''}${alert.rule ? ` · ${alert.rule}` : ''}`}
-      icon={<Icon name="Bell" size={18} />}
-      onClose={onClose}
-      footer={
-        <>
-          <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
-          <AC.Button variant="primary" loading={busy} leadingIcon={<Icon name="Check" size={14} />} onClick={save}>Save case</AC.Button>
-        </>
-      }
+      width={760}
+      destroyOnHidden
+      onCancel={onClose}
+      title={<Space><AlertOutlined /><span>Case · {alert.title || alert.id}</span></Space>}
+      footer={[
+        <Button key="cancel" onClick={onClose}>Cancel</Button>,
+        <Button key="save" type="primary" loading={busy} icon={<CheckOutlined />} onClick={save}>Save case</Button>,
+      ]}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Verdict */}
+      <Flex vertical gap={18}>
+        <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }} items={detail} />
+
         <div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 8 }}>Verdict</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {VERDICTS.map((v) => {
-              const on = verdict === v.id;
-              return (
-                <button key={v.id} type="button" onClick={() => setVerdict(on ? null : v.id)} style={{
-                  padding: '7px 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-                  border: '1px solid ' + (on ? 'transparent' : 'var(--border-default)'),
-                  background: on ? `var(--${v.tone}-subtle-bg, var(--surface-raised))` : 'var(--surface-inset)',
-                  color: on ? `var(--status-${v.tone === 'neutral' ? 'muted' : v.tone}, var(--text-primary))` : 'var(--text-secondary)',
-                  outline: on ? '2px solid var(--accent, #7c8cff)' : 'none',
-                }}>{v.label}</button>
-              );
-            })}
+          <Text strong>1. Verdict</Text>
+          <div style={{ marginTop: 8 }}>
+            <Radio.Group
+              optionType="button"
+              buttonStyle="solid"
+              value={verdict}
+              options={VERDICTS.map((v) => ({ value: v.id, label: v.label }))}
+              onChange={(e) => setVerdict(e.target.value)}
+            />
+            {verdict && <Button type="link" size="small" onClick={() => setVerdict(null)}>Clear</Button>}
           </div>
         </div>
 
-        {/* Notes */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Analyst notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} placeholder="What did you find? Reasoning for the verdict…" spellCheck={false}
-            style={{ width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontFamily: 'var(--font-sans)', fontSize: 13, lineHeight: 1.5 }} />
+        <div>
+          <Text strong>2. Analyst notes</Text>
+          <Input.TextArea
+            style={{ marginTop: 8 }}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            autoSize={{ minRows: 4, maxRows: 12 }}
+            placeholder="What did you find? Reasoning for the verdict…"
+            spellCheck={false}
+          />
         </div>
 
-        {/* IoCs */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>Indicators of compromise</span>
-            <AC.Button type="button" variant="secondary" size="sm" leadingIcon={<Icon name="Plus" size={13} />} onClick={addIoc}>Add IoC</AC.Button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {iocs.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>No IoCs recorded.</div>}
+          <Flex align="center" justify="space-between">
+            <Text strong>3. Indicators of compromise</Text>
+            <Button size="small" icon={<PlusOutlined />} onClick={addIoc}>Add IoC</Button>
+          </Flex>
+          <Flex vertical gap={8} style={{ marginTop: 8 }}>
+            {iocs.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No IoCs recorded" style={{ margin: 0 }} />}
             {iocs.map((ioc, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 32px', gap: 8, alignItems: 'center' }}>
-                <AC.Select value={ioc.type} onChange={(e) => setIoc(i, { type: e.target.value })} options={IOC_TYPES.map((t) => ({ value: t, label: t.toUpperCase() }))} />
-                <AC.Input value={ioc.value} onChange={(e) => setIoc(i, { value: e.target.value })} placeholder="e.g. 185.220.101.34" mono />
-                <AC.IconButton label="Remove" onClick={() => delIoc(i)}><Icon name="X" size={15} /></AC.IconButton>
-              </div>
+              <Space.Compact key={i} block>
+                <Select style={{ width: 120 }} value={ioc.type} onChange={(v) => setIoc(i, { type: v })} options={IOC_TYPES.map((t) => ({ value: t, label: t.toUpperCase() }))} />
+                <Input value={ioc.value} onChange={(e) => setIoc(i, { value: e.target.value })} placeholder="e.g. 185.220.101.34" style={mono} />
+                <Tooltip title="Remove"><Button icon={<DeleteOutlined />} onClick={() => delIoc(i)} /></Tooltip>
+              </Space.Compact>
             ))}
-          </div>
+          </Flex>
         </div>
 
-        {/* Status */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, borderTop: '1px solid var(--border-subtle)' }}>
+        <Divider style={{ margin: 0 }} />
+        <Flex align="center" justify="space-between" gap={12}>
           <div>
-            <div style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>Close this case</div>
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Mark it handled once you've reached a verdict.</div>
+            <Text strong>Close this case</Text>
+            <div><Text type="secondary" style={{ fontSize: 12 }}>Mark it handled once you&apos;ve reached a verdict.</Text></div>
           </div>
-          <AC.Switch checked={status === 'CLOSED'} onChange={() => setStatus((s) => (s === 'CLOSED' ? 'OPEN' : 'CLOSED'))} />
-        </div>
-      </div>
-    </AC.Dialog>
+          <Switch checked={status === 'CLOSED'} checkedChildren="Closed" unCheckedChildren="Open" onChange={(on) => setStatus(on ? 'CLOSED' : 'OPEN')} />
+        </Flex>
+      </Flex>
+    </Modal>
   );
 }
 

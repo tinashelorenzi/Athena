@@ -1,65 +1,55 @@
 'use client';
 import React, { useState, useActionState, useTransition } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import {
+  Alert, App, Button, Card, Col, Descriptions, Empty, Flex, Form, Input, Modal, Popconfirm, Row, Space, Table, Tabs,
+  Tag, Typography,
+} from 'antd';
+import {
+  TeamOutlined, UserAddOutlined, AppstoreOutlined, EditOutlined, TrophyOutlined, DeleteOutlined, UserDeleteOutlined,
+  UserOutlined, MailOutlined, KeyOutlined, ReloadOutlined, SendOutlined, ClockCircleOutlined, CloseOutlined,
+  PlusOutlined, DisconnectOutlined, LinkOutlined, CrownFilled, CopyOutlined, CheckOutlined,
+} from '@ant-design/icons';
 import { deleteCohort, bindScenarios, unbindScenario, removeFromCohort } from '@/app/actions/cohorts';
 import { sendInvitations, revokeInvitation } from '@/app/actions/invitations';
 import { createStudent } from '@/app/actions/students';
 import { generatePassword } from '@/lib/password-gen';
 import { GradeReviewDialog } from './grading/GradeReviewDialog';
 import { Textarea } from './scenarios/primitives';
-import { FormStatus } from './settings/parts';
-
-const TYPE_META = { DOJO: { tone: 'brand', label: 'Dojo' }, ASSESSMENT: { tone: 'accent', label: 'Assessment' } };
-
-const TABS = [
-  { id: 'members', label: 'Members', icon: <Icon name="Users" size={15} /> },
-  { id: 'invite', label: 'Add students', icon: <Icon name="UserPlus" size={15} /> },
-  { id: 'scenarios', label: 'Scenarios', icon: <Icon name="Boxes" size={15} /> },
-  { id: 'grading', label: 'Grading', icon: <Icon name="GraduationCap" size={15} /> },
-  { id: 'standings', label: 'Standings', icon: <Icon name="Trophy" size={15} /> },
-];
+import { FileField, FormLayout, FormStatus, GradeState, Page, SectionHeader, TypeTag, TYPE_META } from './settings/parts';
 
 export function CohortDetail({ cohort, leaderboard, students, bound, invitations, allScenarios, submissions }) {
-  const [tab, setTab] = useState('members');
-  const [confirmDel, setConfirmDel] = useState(false);
-  const [error, setError] = useState(null);
+  const { message } = App.useApp();
+  const onError = (e) => message.error(e);
+
+  const items = [
+    { key: 'members', label: `Members (${students.length})`, icon: <TeamOutlined />, children: <MembersTab cohort={cohort} students={students} onError={onError} /> },
+    { key: 'invite', label: 'Add students', icon: <UserAddOutlined />, children: <InviteTab cohort={cohort} invitations={invitations} onError={onError} /> },
+    { key: 'scenarios', label: `Scenarios (${bound.length})`, icon: <AppstoreOutlined />, children: <ScenariosTab cohort={cohort} bound={bound} allScenarios={allScenarios} onError={onError} /> },
+    { key: 'grading', label: 'Grading', icon: <EditOutlined />, children: <GradingTab submissions={submissions} onError={onError} /> },
+    { key: 'standings', label: 'Standings', icon: <TrophyOutlined />, children: <StandingsTab leaderboard={leaderboard} /> },
+  ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 940, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Link href="/admin/cohorts" style={{ textDecoration: 'none' }}><AC.IconButton label="Back"><Icon name="ArrowLeft" size={18} /></AC.IconButton></Link>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ fontSize: 19, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{cohort.name}</h2>
-          <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>{students.length} students · {bound.length} scenarios · {invitations.length} pending invites</div>
-        </div>
-        <AC.Button variant="outline-danger" size="sm" leadingIcon={<Icon name="Trash2" size={14} />} onClick={() => setConfirmDel(true)}>Delete</AC.Button>
-      </div>
-
-      {error && <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />}
-
-      <AC.Tabs tabs={TABS} value={tab} onChange={setTab} />
-
-      {tab === 'members' && <MembersTab cohort={cohort} students={students} onError={setError} />}
-      {tab === 'invite' && <InviteTab cohort={cohort} invitations={invitations} onError={setError} />}
-      {tab === 'scenarios' && <ScenariosTab cohort={cohort} bound={bound} allScenarios={allScenarios} onError={setError} />}
-      {tab === 'grading' && <GradingTab submissions={submissions} onError={setError} />}
-      {tab === 'standings' && <StandingsTab leaderboard={leaderboard} />}
-
-      <AC.Dialog
-        open={confirmDel}
-        title="Delete cohort?"
-        description={`"${cohort.name}" will be deleted. Students are detached (their accounts remain); scenario bindings and pending invitations are removed.`}
-        icon={<Icon name="Trash2" size={18} />}
-        onClose={() => setConfirmDel(false)}
-        footer={<>
-          <AC.Button variant="ghost" onClick={() => setConfirmDel(false)}>Cancel</AC.Button>
-          <AC.Button variant="danger" leadingIcon={<Icon name="Trash2" size={14} />} onClick={() => { setConfirmDel(false); deleteCohort(cohort.id); }}>Delete cohort</AC.Button>
-        </>}
-      />
-    </div>
+    <Page
+      back="/admin/cohorts"
+      title={cohort.name}
+      description={`${students.length} students · ${bound.length} scenarios · ${invitations.length} pending invites`}
+      maxWidth={1080}
+      extra={
+        <Popconfirm
+          title="Delete cohort?"
+          description={<div style={{ maxWidth: 320 }}>{`"${cohort.name}" will be deleted. Students are detached (their accounts remain); scenario bindings and pending invitations are removed.`}</div>}
+          okText="Delete cohort"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => deleteCohort(cohort.id)}
+        >
+          <Button danger icon={<DeleteOutlined />}>Delete</Button>
+        </Popconfirm>
+      }
+    >
+      <Tabs defaultActiveKey="members" items={items} destroyOnHidden />
+    </Page>
   );
 }
 
@@ -72,24 +62,26 @@ function MembersTab({ cohort, students, onError }) {
     if (res?.error) onError(res.error);
   };
   return (
-    <AC.Card padded={false}>
-      {students.length === 0 ? (
-        <div style={{ padding: 8 }}><AC.EmptyState icon={<Icon name="Users" size={22} />} title="No students yet" description="Invite students on the Invite tab, or set a student's cohort on the Students page." /></div>
-      ) : (
-        <AC.Table
-          rowKey="id"
-          hover={false}
-          columns={[
-            { key: 'name', header: 'Name', primary: true },
-            { key: 'email', header: 'Email', mono: true },
-            { key: 'id', header: '', align: 'right', width: '110px', render: (_v, row) => (
-              <AC.Button variant="ghost" size="sm" loading={busyId === row.id} leadingIcon={<Icon name="UserMinus" size={14} />} onClick={() => remove(row)}>Remove</AC.Button>
-            ) },
-          ]}
-          rows={students}
-        />
-      )}
-    </AC.Card>
+    <Card styles={{ body: { padding: 0 } }}>
+      <Table
+        rowKey="id"
+        dataSource={students}
+        pagination={{ pageSize: 20, hideOnSinglePage: true }}
+        locale={{ emptyText: <Empty description="No students yet — add or invite them on the Add students tab, or set a student's cohort on the Students page." /> }}
+        columns={[
+          { title: 'Name', dataIndex: 'name', key: 'name', sorter: (a, b) => a.name.localeCompare(b.name), render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+          { title: 'Email', dataIndex: 'email', key: 'email', render: (v) => <Typography.Text copyable={{ text: v }}>{v}</Typography.Text> },
+          {
+            title: '', key: 'actions', align: 'right', width: 130,
+            render: (_v, row) => (
+              <Popconfirm title={`Remove ${row.name} from this cohort?`} description="Their account remains." okText="Remove" onConfirm={() => remove(row)}>
+                <Button size="small" type="text" loading={busyId === row.id} icon={<UserDeleteOutlined />}>Remove</Button>
+              </Popconfirm>
+            ),
+          },
+        ]}
+      />
+    </Card>
   );
 }
 
@@ -100,7 +92,6 @@ function ManualAddCard({ cohort, onError }) {
   const [creating, startCreate] = useTransition();
   const [cred, setCred] = useState(null);
   const [linked, setLinked] = useState(null);
-  const formRef = React.useRef(null);
 
   // Seed a strong password after mount (client-only, so it can't cause an SSR
   // hydration mismatch on the input's value).
@@ -129,66 +120,75 @@ function ManualAddCard({ cohort, onError }) {
   };
 
   return (
-    <AC.Card header={<SecHeader icon="UserPlus" title="Add a student directly" subtitle={`Create an account in ${cohort.name}, or link an existing Zaio LMS student by using the same email they use on Zaio.`} />}>
-      <form ref={formRef} onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {linked && (
-          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--success-subtle-bg, rgba(34,197,94,0.12))', border: '1px solid var(--success-subtle-border, rgba(34,197,94,0.35))', fontSize: 13, color: 'var(--status-success, #16a34a)' }}>
-            <Icon name="Check" size={15} />
-            <span><strong>{linked.name}</strong> ({linked.email}) is now in this cohort. They can sign in with <strong>Continue with Zaio LMS</strong>.</span>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 200px' }}><AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} /></div>
-          <div style={{ flex: '1 1 200px' }}><AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} /></div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Password</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-            <div style={{ flex: 1 }}><AC.Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} mono placeholder="At least 10 characters" leadingIcon={<Icon name="KeyRound" size={16} />} /></div>
-            <AC.Button type="button" variant="secondary" leadingIcon={<Icon name="RefreshCw" size={14} />} onClick={() => setPwd(generatePassword())}>Generate</AC.Button>
-          </div>
-          <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>For new accounts only — Zaio LMS students can ignore this and sign in with SSO.</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="UserPlus" size={14} />}>
-            {creating ? 'Saving…' : 'Add to cohort'}
-          </AC.Button>
-        </div>
+    <Card title={<SectionHeader icon={<UserAddOutlined />} title="Add a student directly" subtitle={`Create an account in ${cohort.name}, or link an existing Zaio LMS student by using the same email they use on Zaio.`} />}>
+      <form onSubmit={onSubmit}>
+        <FormLayout>
+          {linked && (
+            <Alert
+              type="success"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title={<><strong>{linked.name}</strong> ({linked.email}) is now in this cohort. They can sign in with <strong>Continue with Zaio LMS</strong>.</>}
+            />
+          )}
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item label="Full name" required><Input name="name" placeholder="e.g. Amara Okafor" required prefix={<UserOutlined />} /></Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item label="Email" required><Input name="email" type="email" placeholder="student@zaio.io" required prefix={<MailOutlined />} /></Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="Password" extra="For new accounts only — Zaio LMS students can ignore this and sign in with SSO.">
+            <Space.Compact style={{ width: '100%' }}>
+              <Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="At least 10 characters" prefix={<KeyOutlined />} />
+              <Button icon={<ReloadOutlined />} onClick={() => setPwd(generatePassword())}>Generate</Button>
+            </Space.Compact>
+          </Form.Item>
+          <Flex justify="flex-end">
+            <Button type="primary" htmlType="submit" loading={creating} icon={<UserAddOutlined />}>
+              {creating ? 'Saving…' : 'Add to cohort'}
+            </Button>
+          </Flex>
+        </FormLayout>
       </form>
-      <CohortCredentialDialog key={cred ? cred.password : 'none'} cred={cred} onClose={() => setCred(null)} />
-    </AC.Card>
+      <CohortCredentialDialog cred={cred} onClose={() => setCred(null)} />
+    </Card>
   );
 }
 
-function CohortCredentialDialog({ cred, onClose }) {
+function CopyButton({ text, label }) {
   const [copied, setCopied] = useState(false);
-  if (!cred) return null;
   const copy = async () => {
-    try { await navigator.clipboard.writeText(`${cred.email}\n${cred.password}`); setCopied(true); } catch { /* clipboard blocked */ }
+    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { /* clipboard blocked */ }
   };
-  const field = (label, value) => (
-    <div>
-      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{value}</div>
-    </div>
-  );
+  return <Button icon={copied ? <CheckOutlined /> : <CopyOutlined />} onClick={copy}>{copied ? 'Copied' : label}</Button>;
+}
+
+function CohortCredentialDialog({ cred, onClose }) {
   return (
-    <AC.Dialog
-      open
-      title={`Account created — ${cred.name}`}
-      description="Copy these now — the password is shown only once and can only be reset, not recovered."
-      icon={<Icon name="KeyRound" size={18} />}
-      onClose={onClose}
-      footer={<>
-        <AC.Button variant="secondary" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copy}>{copied ? 'Copied' : 'Copy'}</AC.Button>
-        <AC.Button variant="primary" onClick={onClose}>Done</AC.Button>
-      </>}
+    <Modal
+      open={!!cred}
+      title={<Flex align="center" gap={8}><KeyOutlined />{cred ? `Account created — ${cred.name}` : ''}</Flex>}
+      onCancel={onClose}
+      destroyOnHidden
+      footer={
+        <Space>
+          {cred && <CopyButton text={`${cred.email}\n${cred.password}`} label="Copy both" />}
+          <Button type="primary" onClick={onClose}>Done</Button>
+        </Space>
+      }
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
-        {field('Email', cred.email)}
-        {field('Password', cred.password)}
-      </div>
-    </AC.Dialog>
+      {cred && (
+        <Flex vertical gap={12}>
+          <Alert type="warning" showIcon title="Copy these now — the password is shown only once and can only be reset, not recovered." />
+          <Descriptions bordered column={1} size="small" items={[
+            { key: 'email', label: 'Email', children: <Typography.Text code copyable>{cred.email}</Typography.Text> },
+            { key: 'password', label: 'Password', children: <Typography.Text code copyable>{cred.password}</Typography.Text> },
+          ]} />
+        </Flex>
+      )}
+    </Modal>
   );
 }
 
@@ -204,47 +204,54 @@ function InviteTab({ cohort, invitations, onError }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Flex vertical gap={16}>
       <ManualAddCard cohort={cohort} onError={onError} />
 
-      <AC.Card header={<SecHeader icon="MailPlus" title="Invite by email" subtitle="Upload a .txt of emails (one per line) or paste them. Each gets an email with a link to set their name + password. (Requires SMTP in Settings → Mail.)" />}>
-        <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Card title={<SectionHeader icon={<MailOutlined />} title="Invite by email" subtitle="Upload a .txt of emails (one per line) or paste them. Each gets an email with a link to set their name + password. (Requires SMTP in Settings → Mail.)" />}>
+        <form action={action}>
           <input type="hidden" name="cohortId" value={cohort.id} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Upload .txt (one email per line)</label>
-            <input type="file" name="emailsFile" accept=".txt,text/plain" style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>…or paste emails</label>
-            <Textarea name="emailsText" mono rows={5} placeholder={'ada@example.com\nalan@example.com'} />
-          </div>
-          <FormStatus state={state} />
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <AC.Button type="submit" variant="primary" loading={sending} leadingIcon={<Icon name="Send" size={14} />}>Send invitations</AC.Button>
-          </div>
+          <FormLayout>
+            <Form.Item label="Upload .txt (one email per line)">
+              <FileField name="emailsFile" accept=".txt,text/plain" label="Select .txt file" />
+            </Form.Item>
+            <Form.Item label="…or paste emails">
+              <Textarea name="emailsText" mono rows={5} placeholder={'ada@example.com\nalan@example.com'} />
+            </Form.Item>
+            <Flex vertical gap={12}>
+              <FormStatus state={state} />
+              <Flex justify="flex-end">
+                <Button type="primary" htmlType="submit" loading={sending} icon={<SendOutlined />}>Send invitations</Button>
+              </Flex>
+            </Flex>
+          </FormLayout>
         </form>
-      </AC.Card>
+      </Card>
 
-      <AC.Card header={<SecHeader icon="Clock" title={`Pending invitations (${invitations.length})`} subtitle="Awaiting the student to accept." />} padded={false}>
-        {invitations.length === 0 ? (
-          <div style={{ padding: 16, fontSize: 12.5, color: 'var(--text-tertiary)' }}>No pending invitations.</div>
-        ) : (
-          <AC.Table
-            rowKey="id"
-            hover={false}
-            columns={[
-              { key: 'email', header: 'Email', primary: true, mono: true },
-              { key: 'created', header: 'Sent', mono: true, width: '120px' },
-              { key: 'expires', header: 'Expires', mono: true, width: '120px' },
-              { key: 'id', header: '', align: 'right', width: '110px', render: (_v, row) => (
-                <AC.Button variant="ghost" size="sm" loading={busyId === row.id} leadingIcon={<Icon name="X" size={14} />} onClick={() => revoke(row)}>Revoke</AC.Button>
-              ) },
-            ]}
-            rows={invitations}
-          />
-        )}
-      </AC.Card>
-    </div>
+      <Card
+        title={<SectionHeader icon={<ClockCircleOutlined />} title={`Pending invitations (${invitations.length})`} subtitle="Awaiting the student to accept." />}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table
+          rowKey="id"
+          dataSource={invitations}
+          pagination={{ pageSize: 10, hideOnSinglePage: true }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No pending invitations." /> }}
+          columns={[
+            { title: 'Email', dataIndex: 'email', key: 'email', render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+            { title: 'Sent', dataIndex: 'created', key: 'created', width: 120, sorter: (a, b) => a.created.localeCompare(b.created) },
+            { title: 'Expires', dataIndex: 'expires', key: 'expires', width: 120, sorter: (a, b) => a.expires.localeCompare(b.expires) },
+            {
+              title: '', key: 'actions', align: 'right', width: 120,
+              render: (_v, row) => (
+                <Popconfirm title="Revoke this invitation?" okText="Revoke" okButtonProps={{ danger: true }} onConfirm={() => revoke(row)}>
+                  <Button size="small" type="text" danger loading={busyId === row.id} icon={<CloseOutlined />}>Revoke</Button>
+                </Popconfirm>
+              ),
+            },
+          ]}
+        />
+      </Card>
+    </Flex>
   );
 }
 
@@ -261,78 +268,92 @@ function ScenariosTab({ cohort, bound, allScenarios, onError }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <AC.Card
-        padded={false}
-        header={<div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-          <div style={{ flex: 1 }}><SecHeader icon="Boxes" title="Bound scenarios" subtitle="Released to this cohort's students — including hidden dojos." /></div>
-          <AC.Button variant="primary" size="sm" leadingIcon={<Icon name="Plus" size={14} />} onClick={() => setBindOpen(true)}>Bind scenario</AC.Button>
-        </div>}
+    <>
+      <Card
+        title={<SectionHeader icon={<AppstoreOutlined />} title="Bound scenarios" subtitle="Released to this cohort's students — including hidden dojos." />}
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setBindOpen(true)}>Bind scenario</Button>}
+        styles={{ body: { padding: 0 } }}
       >
-        {bound.length === 0 ? (
-          <div style={{ padding: 8 }}><AC.EmptyState icon={<Icon name="Boxes" size={22} />} title="No scenarios bound" description="Bind a scenario to release it to this cohort." actions={<AC.Button variant="primary" size="sm" onClick={() => setBindOpen(true)}>Bind scenario</AC.Button>} /></div>
-        ) : (
-          <AC.Table
-            rowKey="bindingId"
-            hover={false}
-            columns={[
-              { key: 'title', header: 'Scenario', primary: true },
-              { key: 'type', header: 'Type', width: '130px', render: (v) => <AC.Badge tone={TYPE_META[v].tone} square>{TYPE_META[v].label}</AC.Badge> },
-              { key: 'bindingId', header: '', align: 'right', width: '110px', render: (_v, row) => (
-                <AC.Button variant="ghost" size="sm" loading={busyId === row.bindingId} leadingIcon={<Icon name="Unlink" size={14} />} onClick={() => unbind(row)}>Unbind</AC.Button>
-              ) },
-            ]}
-            rows={bound}
-          />
-        )}
-      </AC.Card>
+        <Table
+          rowKey="bindingId"
+          dataSource={bound}
+          pagination={false}
+          locale={{
+            emptyText: (
+              <Empty description="No scenarios bound — bind a scenario to release it to this cohort.">
+                <Button type="primary" onClick={() => setBindOpen(true)}>Bind scenario</Button>
+              </Empty>
+            ),
+          }}
+          columns={[
+            { title: 'Scenario', dataIndex: 'title', key: 'title', sorter: (a, b) => a.title.localeCompare(b.title), render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+            {
+              title: 'Type', dataIndex: 'type', key: 'type', width: 140,
+              filters: Object.entries(TYPE_META).map(([value, m]) => ({ text: m.label, value })),
+              onFilter: (value, row) => row.type === value,
+              render: (v) => <TypeTag type={v} />,
+            },
+            {
+              title: '', key: 'actions', align: 'right', width: 120,
+              render: (_v, row) => (
+                <Popconfirm title={`Unbind "${row.title}"?`} description="Students in this cohort lose access to it." okText="Unbind" onConfirm={() => unbind(row)}>
+                  <Button size="small" type="text" loading={busyId === row.bindingId} icon={<DisconnectOutlined />}>Unbind</Button>
+                </Popconfirm>
+              ),
+            },
+          ]}
+        />
+      </Card>
 
       <BindDialog open={bindOpen} onClose={() => setBindOpen(false)} cohortId={cohort.id} scenarios={allScenarios.filter((s) => !boundIds.has(s.id))} onError={onError} />
-    </div>
+    </>
   );
 }
 
 function BindDialog({ open, onClose, cohortId, scenarios, onError }) {
-  const [selected, setSelected] = useState(() => new Set());
+  const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
-  const toggle = (id) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   const submit = async () => {
-    if (selected.size === 0) { onError('Select at least one scenario.'); return; }
+    if (selected.length === 0) { onError('Select at least one scenario.'); return; }
     setBusy(true);
     const res = await bindScenarios(cohortId, [...selected]);
     setBusy(false);
     if (res?.error) { onError(res.error); return; }
-    setSelected(new Set());
+    setSelected([]);
     onClose();
   };
 
   return (
-    <AC.Dialog
+    <Modal
       open={open}
-      title="Bind scenarios"
-      description="Selected scenarios become visible to this cohort's students."
-      icon={<Icon name="Link" size={18} />}
-      onClose={onClose}
-      footer={<>
-        <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
-        <AC.Button variant="primary" loading={busy} onClick={submit}>Bind{selected.size ? ` (${selected.size})` : ''}</AC.Button>
-      </>}
+      width={620}
+      title={<Flex align="center" gap={8}><LinkOutlined />Bind scenarios</Flex>}
+      onCancel={onClose}
+      onOk={submit}
+      okText={`Bind${selected.length ? ` (${selected.length})` : ''}`}
+      okButtonProps={{ disabled: scenarios.length === 0 }}
+      confirmLoading={busy}
     >
-      {scenarios.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>All authored scenarios are already bound to this cohort.</div>
-      ) : (
-        <div style={{ maxHeight: 300, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
-          {scenarios.map((s) => (
-            <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 6, cursor: 'pointer' }}>
-              <AC.Checkbox checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
-              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{s.title}</span>
-              <AC.Badge tone={TYPE_META[s.type].tone} square>{TYPE_META[s.type].label}</AC.Badge>
-            </label>
-          ))}
-        </div>
-      )}
-    </AC.Dialog>
+      <Typography.Paragraph type="secondary">Selected scenarios become visible to this cohort&apos;s students.</Typography.Paragraph>
+      <Table
+        size="small"
+        rowKey="id"
+        dataSource={scenarios}
+        pagination={false}
+        scroll={{ y: 320 }}
+        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys) }}
+        onRow={(row) => ({
+          onClick: () => setSelected((p) => (p.includes(row.id) ? p.filter((k) => k !== row.id) : [...p, row.id])),
+          style: { cursor: 'pointer' },
+        })}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="All authored scenarios are already bound to this cohort." /> }}
+        columns={[
+          { title: 'Scenario', dataIndex: 'title', key: 'title' },
+          { title: 'Type', dataIndex: 'type', key: 'type', width: 130, render: (v) => <TypeTag type={v} /> },
+        ]}
+      />
+    </Modal>
   );
 }
 
@@ -341,73 +362,64 @@ function GradingTab({ submissions, onError }) {
   const [grading, setGrading] = useState(null); // submission row
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <AC.Card padded={false} header={<SecHeader icon="GraduationCap" title="Submissions" subtitle="Deliverables submitted by this cohort's students, awaiting or holding a grade." />}>
-        {submissions.length === 0 ? (
-          <div style={{ padding: 8 }}><AC.EmptyState icon={<Icon name="Inbox" size={22} />} title="No submissions yet" description="Submissions appear here once students complete bound scenarios and submit their deliverables." /></div>
-        ) : (
-          <AC.Table
-            rowKey="id"
-            hover={false}
-            columns={[
-              { key: 'studentName', header: 'Student', primary: true },
-              { key: 'scenarioTitle', header: 'Scenario' },
-              { key: 'submitted', header: 'Submitted', mono: true, width: '120px' },
-              { key: 'status', header: 'Status', width: '160px', render: (v, row) => (
-                v !== 'GRADED'
-                  ? (row.committed
-                    ? <AC.Badge tone="warning" dot square>To grade</AC.Badge>
-                    : <AC.Badge tone="neutral" dot square>Open</AC.Badge>)
-                  : row.released
-                    ? <AC.Badge tone="success" dot square>Released · {row.grade ?? '—'}</AC.Badge>
-                    : <AC.Badge tone="accent" dot square>Held · {row.grade ?? '—'}</AC.Badge>
-              ) },
-              { key: 'id', header: '', align: 'right', width: '100px', render: (_v, row) => (
-                <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="PenLine" size={14} />} onClick={() => setGrading(row)}>{row.status === 'GRADED' ? 'Review' : row.committed ? 'Grade' : 'Review'}</AC.Button>
-              ) },
-            ]}
-            rows={submissions}
-          />
-        )}
-      </AC.Card>
+    <>
+      <Card
+        title={<SectionHeader icon={<EditOutlined />} title="Submissions" subtitle="Deliverables submitted by this cohort's students, awaiting or holding a grade." />}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table
+          rowKey="id"
+          dataSource={submissions}
+          pagination={{ pageSize: 20, hideOnSinglePage: true }}
+          onRow={(row) => ({ onClick: () => setGrading(row), style: { cursor: 'pointer' } })}
+          locale={{ emptyText: <Empty description="No submissions yet — they appear once students complete bound scenarios and submit their deliverables." /> }}
+          columns={[
+            { title: 'Student', dataIndex: 'studentName', key: 'studentName', sorter: (a, b) => a.studentName.localeCompare(b.studentName), render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+            { title: 'Scenario', dataIndex: 'scenarioTitle', key: 'scenarioTitle' },
+            { title: 'Submitted', dataIndex: 'submitted', key: 'submitted', width: 120, sorter: (a, b) => a.submitted.localeCompare(b.submitted) },
+            { title: 'Status', key: 'status', width: 170, render: (_v, row) => <GradeState row={row} /> },
+            {
+              title: '', key: 'actions', align: 'right', width: 110,
+              render: (_v, row) => (
+                <Button size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); setGrading(row); }}>
+                  {row.status === 'GRADED' ? 'Review' : row.committed ? 'Grade' : 'Review'}
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </Card>
 
       <GradeReviewDialog key={grading?.id || 'none'} submission={grading} onClose={() => setGrading(null)} onError={onError} onDone={() => router.refresh()} />
-    </div>
+    </>
   );
 }
+
+const MEDAL = ['#D4A017', '#A0A7B4', '#B87333'];
 
 function StandingsTab({ leaderboard }) {
   const rows = (leaderboard || []).map((r, i) => ({ ...r, rank: i + 1 }));
   return (
-    <AC.Card padded={false} header={<SecHeader icon="Trophy" title="Standings" subtitle="Reputation earned from graded assessments, highest first." />}>
-      {rows.length === 0 ? (
-        <div style={{ padding: 8 }}><AC.EmptyState icon={<Icon name="Trophy" size={22} />} title="No standings yet" description="Reputation appears once assessment submissions are graded." /></div>
-      ) : (
-        <AC.Table
-          rowKey="id"
-          hover={false}
-          columns={[
-            { key: 'rank', header: '#', width: '50px', mono: true },
-            { key: 'name', header: 'Student', primary: true },
-            { key: 'assessments', header: 'Assessments', align: 'right', mono: true, width: '130px' },
-            { key: 'reputation', header: 'Reputation', align: 'right', mono: true, width: '120px' },
-          ]}
-          rows={rows}
-        />
-      )}
-    </AC.Card>
-  );
-}
-
-function SecHeader({ icon, title, subtitle }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <Icon name={icon} size={16} style={{ color: 'var(--text-secondary)' }} />
-      <div>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
-        {subtitle && <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{subtitle}</div>}
-      </div>
-    </div>
+    <Card
+      title={<SectionHeader icon={<TrophyOutlined />} title="Standings" subtitle="Reputation earned from graded assessments, highest first." />}
+      styles={{ body: { padding: 0 } }}
+    >
+      <Table
+        rowKey="id"
+        dataSource={rows}
+        pagination={false}
+        locale={{ emptyText: <Empty description="No standings yet — reputation appears once assessment submissions are graded." /> }}
+        columns={[
+          {
+            title: '#', dataIndex: 'rank', key: 'rank', width: 64,
+            render: (v) => (v <= 3 ? <Space size={6}><CrownFilled style={{ color: MEDAL[v - 1] }} />{v}</Space> : v),
+          },
+          { title: 'Student', dataIndex: 'name', key: 'name', render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+          { title: 'Assessments', dataIndex: 'assessments', key: 'assessments', align: 'right', width: 140 },
+          { title: 'Reputation', dataIndex: 'reputation', key: 'reputation', align: 'right', width: 140, render: (v) => <Tag color="gold">{v}</Tag> },
+        ]}
+      />
+    </Card>
   );
 }
 

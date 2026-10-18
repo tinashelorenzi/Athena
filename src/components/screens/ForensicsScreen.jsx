@@ -1,87 +1,121 @@
 'use client';
 import React from 'react';
+import { Row, Col, Card, List, Avatar, Tag, Badge, Button, Descriptions, Statistic, Flex, Space, Typography, theme } from 'antd';
+import { DownloadOutlined, FileSearchOutlined, FileTextOutlined, SettingOutlined, FileZipOutlined, HddOutlined } from '@ant-design/icons';
 import * as FO from '@/components/ds';
-import { Icon } from '@/components/Icon';
 
 /* Forensics — scenario sample artifacts + static analysis. */
 const SAMPLES = [
-  { id: 1, name: 'Invoice_July.docm', type: 'Office macro', size: '84 KB', sha: 'a3f5c9d1…e8b027', verdict: 'malicious', icon: 'FileText' },
-  { id: 2, name: 'svc.exe', type: 'PE32 executable', size: '412 KB', sha: '7bd44e2a…91ff03', verdict: 'malicious', icon: 'FileCog' },
-  { id: 3, name: 'capture_1432.pcap', type: 'Network capture', size: '2.1 MB', sha: 'c01aa8f4…5d7e12', verdict: 'suspicious', icon: 'FileDigit' },
-  { id: 4, name: 'memory.dmp', type: 'Memory image', size: '1.9 GB', sha: 'ff2093bc…0a4471', verdict: 'pending', icon: 'HardDrive' },
+  { id: 1, name: 'Invoice_July.docm', type: 'Office macro', size: '84 KB', sha: 'a3f5c9d1…e8b027', verdict: 'malicious', icon: <FileTextOutlined /> },
+  { id: 2, name: 'svc.exe', type: 'PE32 executable', size: '412 KB', sha: '7bd44e2a…91ff03', verdict: 'malicious', icon: <SettingOutlined /> },
+  { id: 3, name: 'capture_1432.pcap', type: 'Network capture', size: '2.1 MB', sha: 'c01aa8f4…5d7e12', verdict: 'suspicious', icon: <FileZipOutlined /> },
+  { id: 4, name: 'memory.dmp', type: 'Memory image', size: '1.9 GB', sha: 'ff2093bc…0a4471', verdict: 'pending', icon: <HddOutlined /> },
 ];
-const VT = { malicious: { tone: 'danger', color: 'var(--sev-critical)', label: 'Malicious' }, suspicious: { tone: 'warning', color: 'var(--sev-high)', label: 'Suspicious' }, pending: { tone: 'neutral', color: 'var(--text-tertiary)', label: 'Not analyzed' } };
+const VT = {
+  malicious: { tag: 'error', status: 'error', color: 'var(--sev-critical)', label: 'Malicious' },
+  suspicious: { tag: 'warning', status: 'warning', color: 'var(--sev-high)', label: 'Suspicious' },
+  pending: { tag: 'default', status: 'default', color: 'var(--text-tertiary)', label: 'Not analyzed' },
+};
 const STRINGS = ['powershell -nop -w hidden -enc', 'pay-invoice-verify.top', '185.220.101.34', 'vssadmin delete shadows', 'CreateRemoteThread', '.locked', 'YOUR FILES HAVE BEEN ENCRYPTED'];
 
 export function ForensicsScreen() {
+  const { token } = theme.useToken();
   const [sel, setSel] = React.useState(SAMPLES[0]);
+  const mono = { fontFamily: token.fontFamilyCode };
+  const v = VT[sel.verdict];
+
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-      <div style={{ width: 340, flex: 'none', borderRight: '1px solid var(--border-subtle)', background: 'var(--surface-panel)', overflow: 'auto', padding: '16px 14px' }}>
-        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', padding: '2px 4px 10px' }}>Samples · Ransomware in Finance</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {SAMPLES.map((s) => {
-            const active = sel.id === s.id; const v = VT[s.verdict];
-            return (
-              <button key={s.id} onClick={() => setSel(s)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', textAlign: 'left', cursor: 'pointer', background: active ? 'var(--surface-selected)' : 'var(--surface-card)', border: `1px solid ${active ? 'var(--border-strong)' : 'var(--border-default)'}`, borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ width: 32, height: 32, flex: 'none', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-inset)', color: v.color }}><Icon name={s.icon} size={16} /></span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 2 }}>{s.type} · {s.size}</div>
+    <Flex vertical gap={16} style={{ padding: 24 }}>
+      <FO.PageHeader title="Forensics" description="Static analysis of the artifacts collected for this scenario." />
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={9} xxl={7}>
+          <Card title="Samples" extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>Ransomware in Finance</Typography.Text>} styles={{ body: { padding: 0 } }}>
+            <List
+              dataSource={SAMPLES}
+              renderItem={(s) => {
+                const sv = VT[s.verdict];
+                const active = sel.id === s.id;
+                return (
+                  <List.Item
+                    onClick={() => setSel(s)}
+                    style={{ cursor: 'pointer', paddingInline: 16, background: active ? token.controlItemBgActive : undefined }}
+                    actions={[<Badge key="v" status={sv.status} />]}
+                  >
+                    <List.Item.Meta
+                      avatar={<Avatar shape="square" icon={s.icon} style={{ background: token.colorFillTertiary, color: sv.color }} />}
+                      title={<Typography.Text ellipsis style={{ ...mono, fontSize: 13 }}>{s.name}</Typography.Text>}
+                      description={<span style={{ fontSize: 12 }}>{s.type} · {s.size}</span>}
+                    />
+                  </List.Item>
+                );
+              }}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={15} xxl={17}>
+          <Flex vertical gap={16}>
+            <Card>
+              <Flex align="center" gap={14} wrap>
+                <Avatar shape="square" size={48} icon={sel.icon} style={{ background: token.colorFillTertiary, color: v.color }} />
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <Space size={10} align="center" wrap>
+                    <Typography.Title level={4} style={{ ...mono, margin: 0 }}>{sel.name}</Typography.Title>
+                    <Tag color={v.tag} style={{ marginInlineEnd: 0 }}>{v.label}</Tag>
+                  </Space>
+                  <div><Typography.Text type="secondary">{sel.type} · {sel.size}</Typography.Text></div>
                 </div>
-                <span style={{ width: 8, height: 8, borderRadius: 999, background: v.color, flex: 'none' }} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                <Space>
+                  <Button icon={<DownloadOutlined />}>Download</Button>
+                  <Button type="primary" icon={<FileSearchOutlined />}>Re-analyze</Button>
+                </Space>
+              </Flex>
+            </Card>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '22px 26px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 20 }}>
-          <span style={{ width: 46, height: 46, flex: 'none', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-raised)', border: '1px solid var(--border-default)', color: VT[sel.verdict].color }}><Icon name={sel.icon} size={22} /></span>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{sel.name}</h2>
-              <FO.Badge tone={VT[sel.verdict].tone} dot square>{VT[sel.verdict].label}</FO.Badge>
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', marginTop: 4 }}>{sel.type} · {sel.size}</div>
-          </div>
-          <FO.Button variant="secondary" size="sm" leadingIcon={<Icon name="Download" size={14} />}>Download</FO.Button>
-          <FO.Button variant="primary" size="sm" leadingIcon={<Icon name="ScanSearch" size={14} />}>Re-analyze</FO.Button>
-        </div>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} md={12}>
+                <Card title="Hashes" size="small" style={{ height: '100%' }}>
+                  <Descriptions
+                    column={1}
+                    size="small"
+                    colon={false}
+                    styles={{ label: { ...mono, fontSize: 12 }, content: { ...mono, fontSize: 12, justifyContent: 'flex-end' } }}
+                    items={[
+                      { key: 'sha', label: 'SHA-256', children: sel.sha },
+                      { key: 'md5', label: 'MD5', children: '9e107d9d…f98402' },
+                      { key: 'ssdeep', label: 'SSDEEP', children: '3072:xF9k…' },
+                    ]}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} md={12}>
+                <Card title="Detection" size="small" style={{ height: '100%' }}>
+                  <Statistic
+                    value={41}
+                    suffix={<Typography.Text type="secondary" style={{ fontSize: 13 }}>/ 68 engines flagged</Typography.Text>}
+                    styles={{ content: { ...mono, fontWeight: 600, color: v.color } }}
+                  />
+                  <Space size={6} wrap style={{ marginTop: 10 }}>
+                    {['Ransom.LockBit', 'Trojan.Downloader', 'W97M/Dropper'].map((t) => <Tag key={t} color="error" style={{ ...mono, marginInlineEnd: 0 }}>{t}</Tag>)}
+                  </Space>
+                </Card>
+              </Col>
+            </Row>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 10 }}>Hashes</div>
-            {[['SHA-256', sel.sha], ['MD5', '9e107d9d…f98402'], ['SSDEEP', '3072:xF9k…']].map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', fontSize: 12 }}>
-                <span style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{k}</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{v}</span>
+            <Card title="Interesting strings" size="small">
+              <div style={{ ...mono, fontSize: 12.5, lineHeight: 1.9, background: token.colorFillQuaternary, borderRadius: token.borderRadius, padding: '10px 14px' }}>
+                {STRINGS.map((s, i) => (
+                  <div key={i} style={{ color: /top|101\.34|encrypt|ENCRYPTED|enc|shadows/i.test(s) ? 'var(--sev-high)' : token.colorTextSecondary }}>
+                    <span style={{ color: token.colorTextTertiary, marginRight: 12 }}>{String(0x400 + i * 16).toString(16).padStart(6, '0')}</span>{s}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: 16 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 10 }}>Detection</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 26, fontWeight: 600, color: VT[sel.verdict].color }}>41</span>
-              <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>/ 68 engines flagged</span>
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-              {['Ransom.LockBit', 'Trojan.Downloader', 'W97M/Dropper'].map((t) => <span key={t} style={{ fontSize: 11, color: 'var(--sev-critical)', background: 'var(--sev-critical-bg)', border: '1px solid var(--sev-critical-border)', borderRadius: 999, padding: '2px 9px', fontFamily: 'var(--font-mono)' }}>{t}</span>)}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 8 }}>Interesting strings</div>
-        <div style={{ background: 'var(--surface-inset)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: 12.5, lineHeight: 1.9 }}>
-          {STRINGS.map((s, i) => (
-            <div key={i} style={{ color: /top|101\.34|encrypt|ENCRYPTED|enc|shadows/i.test(s) ? 'var(--sev-high)' : 'var(--text-secondary)' }}>
-              <span style={{ color: 'var(--text-tertiary)', marginRight: 12 }}>{String(0x400 + i * 16).toString(16).padStart(6, '0')}</span>{s}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+            </Card>
+          </Flex>
+        </Col>
+      </Row>
+    </Flex>
   );
 }
 

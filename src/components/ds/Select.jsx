@@ -1,62 +1,64 @@
 'use client';
 import React from 'react';
+import { Select as AntSelect, Flex, theme } from 'antd';
 
-const CSS = `
-.ath-selwrap{display:flex;flex-direction:column;gap:6px;}
-.ath-selwrap__label{font-size:var(--fs-body-sm);font-weight:var(--fw-medium);color:var(--text-secondary);}
-.ath-sel{position:relative;display:flex;align-items:center;}
-.ath-sel select{
-  appearance:none;-webkit-appearance:none;width:100%;
-  background:var(--surface-inset);color:var(--text-primary);
-  border:1px solid var(--border-default);border-radius:var(--radius-sm);
-  font-family:var(--font-sans);font-size:var(--fs-body);
-  padding:0 32px 0 10px;cursor:pointer;
-  transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard);
-}
-.ath-sel--sm select{height:var(--control-h-sm);}
-.ath-sel--md select{height:var(--control-h-md);}
-.ath-sel--lg select{height:var(--control-h-lg);}
-.ath-sel select:hover{border-color:var(--border-strong);}
-.ath-sel select:focus-visible{outline:none;border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(84,87,232,.25);}
-.ath-sel select:disabled{opacity:.5;cursor:not-allowed;}
-.ath-sel__chev{position:absolute;right:10px;pointer-events:none;color:var(--text-tertiary);display:flex;}
-.ath-sel__chev svg{width:16px;height:16px;}
-.ath-sel select option{background:var(--surface-card);color:var(--text-primary);}
-`;
+const SIZES = { sm: 'small', md: 'medium', lg: 'large' };
 
-let injected = false;
-function inject() {
-  if (injected || typeof document === 'undefined') return;
-  injected = true;
-  const s = document.createElement('style');
-  s.setAttribute('data-ath', 'select');
-  s.textContent = CSS;
-  document.head.appendChild(s);
-}
+/* Select over antd Select, keeping the native-<select> contract callers rely on:
+   - options: strings or { value, label }
+   - onChange receives an event-like `{ target: { value, name } }`
+   - `name` is mirrored into a hidden input so it submits with plain forms
+   - works controlled (`value`) or uncontrolled (`defaultValue`). */
+export function Select(props) {
+  const {
+    label,
+    size = 'md',
+    options = [],
+    id,
+    name,
+    value,
+    defaultValue,
+    onChange,
+    disabled,
+    className = '',
+    style,
+  } = props;
+  // Everything else passes through to antd; native-only props are dropped.
+  const rest = { ...props };
+  ['label', 'size', 'options', 'children', 'id', 'name', 'value', 'defaultValue', 'onChange', 'disabled', 'required', 'className', 'style'].forEach((k) => delete rest[k]);
+  const { token } = theme.useToken();
+  const opts = options.map((o) => (typeof o === 'object' ? { value: o.value, label: o.label } : { value: o, label: o }));
+  const controlled = value !== undefined;
+  const [inner, setInner] = React.useState(defaultValue !== undefined ? defaultValue : opts[0]?.value);
+  const current = controlled ? value : inner;
+  const fieldId = id || (label ? `s-${String(label).replace(/\s+/g, '-').toLowerCase()}` : undefined);
 
-export function Select({ label, size = 'md', options = [], children, id, className = '', ...rest }) {
-  inject();
-  const fieldId = id || (label ? `s-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined);
+  const handle = (v) => {
+    if (!controlled) setInner(v);
+    if (onChange) onChange({ target: { value: v, name }, currentTarget: { value: v, name } });
+  };
+
   const control = (
-    <div className={`ath-sel ath-sel--${size} ${className}`}>
-      <select id={fieldId} {...rest}>
-        {options.map((o) => {
-          const val = typeof o === 'object' ? o.value : o;
-          const lbl = typeof o === 'object' ? o.label : o;
-          return <option key={val} value={val}>{lbl}</option>;
-        })}
-        {children}
-      </select>
-      <span className="ath-sel__chev" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-      </span>
-    </div>
+    <>
+      <AntSelect
+        id={fieldId}
+        size={SIZES[size] || 'medium'}
+        value={current}
+        onChange={handle}
+        options={opts}
+        disabled={disabled}
+        className={className}
+        style={{ width: '100%', ...style }}
+        {...rest}
+      />
+      {name && <input type="hidden" name={name} value={current ?? ''} />}
+    </>
   );
   if (!label) return control;
   return (
-    <div className="ath-selwrap">
-      <label className="ath-selwrap__label" htmlFor={fieldId}>{label}</label>
+    <Flex vertical gap={6}>
+      <label htmlFor={fieldId} style={{ fontSize: 13, fontWeight: 500, color: token.colorTextSecondary }}>{label}</label>
       {control}
-    </div>
+    </Flex>
   );
 }

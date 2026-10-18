@@ -1,100 +1,133 @@
 'use client';
 import React from 'react';
+import { Card, Tabs, Table, Tag, List, Avatar, Button, Flex, Space, Typography, Badge, theme } from 'antd';
+import { DesktopOutlined, CameraOutlined, StopOutlined, WarningFilled, GlobalOutlined, CodeOutlined, ApartmentOutlined, ClusterOutlined } from '@ant-design/icons';
 import * as ED from '@/components/ds';
-import { Icon } from '@/components/Icon';
 import { AthenaData } from '@/lib/data';
 
 /* EDR — endpoint detail: processes, network, files, browser & shell history. */
-const FLAG_TONE = { malicious: 'danger', suspicious: 'warning', c2: 'danger', dns: 'warning', smb: 'neutral' };
+const FLAG_COLOR = { malicious: 'error', suspicious: 'warning', c2: 'error', dns: 'warning', smb: 'default' };
+
+function Mono({ children, style }) {
+  const { token } = theme.useToken();
+  return <span style={{ fontFamily: token.fontFamilyCode, fontSize: 12.5, ...style }}>{children}</span>;
+}
+
+function TabLabel({ icon, label, count }) {
+  return (
+    <Space size={6}>
+      {icon}{label}
+      {count != null && <Badge count={count} overflowCount={999} color="default" showZero style={{ boxShadow: 'none' }} />}
+    </Space>
+  );
+}
 
 export function EdrScreen() {
+  const { token } = theme.useToken();
   const [tab, setTab] = React.useState('processes');
   const d = AthenaData;
 
+  const processColumns = [
+    { key: 'name', dataIndex: 'name', title: 'Process', render: (v, r) => <Space size={7}>{r.susp && <WarningFilled style={{ color: token.colorError }} />}<Mono style={{ fontWeight: 500 }}>{v}</Mono></Space> },
+    { key: 'pid', dataIndex: 'pid', title: 'PID', width: 80, render: (v) => <Mono>{v}</Mono> },
+    { key: 'parent', dataIndex: 'parent', title: 'Parent', width: 140, render: (v) => <Mono>{v}</Mono> },
+    { key: 'user', dataIndex: 'user', title: 'User', width: 110, render: (v) => <Mono>{v}</Mono> },
+    { key: 'cpu', dataIndex: 'cpu', title: 'CPU %', width: 90, align: 'right', render: (v) => <Mono>{v}</Mono> },
+    { key: 'mem', dataIndex: 'mem', title: 'Mem MB', width: 100, align: 'right', render: (v) => <Mono>{v}</Mono> },
+    { key: 'cmd', title: '', width: 120, render: (_, r) => (r.susp ? <Tag color="error">Suspicious</Tag> : null) },
+  ];
+
+  const networkColumns = [
+    { key: 'proto', dataIndex: 'proto', title: 'Proto', width: 80, render: (v) => <Mono>{v}</Mono> },
+    { key: 'laddr', dataIndex: 'laddr', title: 'Local address', render: (v) => <Mono>{v}</Mono> },
+    { key: 'raddr', dataIndex: 'raddr', title: 'Remote address', render: (v) => <Mono style={{ fontWeight: 500, color: token.colorText }}>{v}</Mono> },
+    { key: 'state', dataIndex: 'state', title: 'State', width: 140, render: (v) => <Mono>{v}</Mono> },
+    { key: 'proc', dataIndex: 'proc', title: 'Process', render: (v) => <Mono>{v}</Mono> },
+    { key: 'flag', dataIndex: 'flag', title: '', width: 110, render: (v) => (v ? <Tag color={FLAG_COLOR[v] || 'default'}>{v.toUpperCase()}</Tag> : null) },
+  ];
+
+  const items = [
+    {
+      key: 'processes',
+      label: <TabLabel icon={<ApartmentOutlined />} label="Processes" count={214} />,
+      children: <Table size="small" rowKey="pid" pagination={false} scroll={{ x: 'max-content' }} columns={processColumns} dataSource={d.processes} />,
+    },
+    {
+      key: 'network',
+      label: <TabLabel icon={<ClusterOutlined />} label="Network" count={38} />,
+      children: <Table size="small" rowKey="laddr" pagination={false} scroll={{ x: 'max-content' }} columns={networkColumns} dataSource={d.connections} />,
+    },
+    {
+      key: 'browser',
+      label: <TabLabel icon={<GlobalOutlined />} label="Browser history" />,
+      children: (
+        <List
+          dataSource={d.browserHistory}
+          renderItem={(h) => (
+            <List.Item actions={h.flag ? [<Tag key="flag" color={FLAG_COLOR[h.flag]}>{h.flag}</Tag>] : undefined}>
+              <List.Item.Meta
+                avatar={<Mono style={{ color: token.colorTextTertiary, display: 'inline-block', width: 56 }}>{h.t}</Mono>}
+                title={h.title}
+                description={<Typography.Text type="secondary" ellipsis style={{ fontFamily: token.fontFamilyCode, fontSize: 12, maxWidth: 640 }}>{h.url}</Typography.Text>}
+              />
+            </List.Item>
+          )}
+        />
+      ),
+    },
+    {
+      key: 'shell',
+      label: <TabLabel icon={<CodeOutlined />} label="Shell history" />,
+      children: (
+        <List
+          size="small"
+          bordered
+          dataSource={d.shellHistory}
+          style={{ background: token.colorFillQuaternary }}
+          renderItem={(h) => (
+            <List.Item actions={h.flag ? [<Tag key="flag" color={FLAG_COLOR[h.flag]}>{h.flag}</Tag>] : undefined}>
+              <Flex gap={12} align="center" style={{ minWidth: 0, flex: 1 }}>
+                <Mono style={{ color: token.colorTextTertiary, width: 56, flex: 'none' }}>{h.t}</Mono>
+                <Mono style={{ color: token.colorSuccess }}>$</Mono>
+                <Typography.Text ellipsis style={{ fontFamily: token.fontFamilyCode, fontSize: 12.5, color: h.flag === 'malicious' ? token.colorError : undefined }}>{h.cmd}</Typography.Text>
+              </Flex>
+            </List.Item>
+          )}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Host header */}
-      <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ width: 46, height: 46, borderRadius: 'var(--radius-md)', background: 'var(--surface-raised)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-strong)' }}>
-          <Icon name="MonitorSmartphone" size={24} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2 style={{ fontSize: 19, fontWeight: 600, color: 'var(--text-primary)', margin: 0, fontFamily: 'var(--font-mono)' }}>win-ep-04</h2>
-            <ED.StatusDot status="isolated" label="Isolated by you" />
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 5, fontSize: 12.5, color: 'var(--text-tertiary)' }}>
-            <span>Windows 11 Pro · 22H2</span><span>10.0.0.5</span><span>j.mensah (Finance)</span><span style={{ color: 'var(--sev-critical)' }}>Risk score 92</span>
-          </div>
-        </div>
-        <ED.Button variant="secondary" size="sm" leadingIcon={<Icon name="Camera" size={14} />}>Snapshot</ED.Button>
-        <ED.Button variant="outline-danger" size="sm" leadingIcon={<Icon name="ShieldOff" size={14} />}>Contain</ED.Button>
-      </div>
+    <Flex vertical gap={16} style={{ padding: 24 }}>
+      <ED.PageHeader title="Endpoint detection & response" description="Inspect live process, network and history telemetry from an endpoint." />
 
-      <div style={{ padding: '0 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)' }}>
-        <ED.Tabs value={tab} onChange={setTab} tabs={[
-          { id: 'processes', label: 'Processes', count: 214, icon: <Icon name="Cpu" size={15} /> },
-          { id: 'network', label: 'Network', count: 38, icon: <Icon name="Network" size={15} /> },
-          { id: 'browser', label: 'Browser history', icon: <Icon name="Globe" size={15} /> },
-          { id: 'shell', label: 'Shell history', icon: <Icon name="SquareTerminal" size={15} /> },
-        ]} />
-      </div>
+      <Card>
+        <Flex align="center" gap={16} wrap>
+          <Avatar shape="square" size={48} icon={<DesktopOutlined />} style={{ background: token.colorPrimaryBg, color: token.colorPrimary }} />
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <Space size={12} align="center">
+              <Typography.Title level={4} style={{ margin: 0, fontFamily: token.fontFamilyCode }}>win-ep-04</Typography.Title>
+              <ED.StatusDot status="isolated" label="Isolated by you" />
+            </Space>
+            <Flex gap={16} wrap style={{ marginTop: 4 }}>
+              <Typography.Text type="secondary">Windows 11 Pro · 22H2</Typography.Text>
+              <Typography.Text type="secondary"><Mono>10.0.0.5</Mono></Typography.Text>
+              <Typography.Text type="secondary">j.mensah (Finance)</Typography.Text>
+              <Typography.Text type="danger">Risk score 92</Typography.Text>
+            </Flex>
+          </div>
+          <Space>
+            <Button icon={<CameraOutlined />}>Snapshot</Button>
+            <Button danger icon={<StopOutlined />}>Contain</Button>
+          </Space>
+        </Flex>
+      </Card>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '18px 24px' }}>
-        {tab === 'processes' && (
-          <ED.Table rowKey="pid" compact
-            columns={[
-              { key: 'name', header: 'Process', primary: true, render: (v, r) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>{r.susp && <Icon name="TriangleAlert" size={13} style={{ color: 'var(--sev-critical)' }} />}<span style={{ fontFamily: 'var(--font-mono)' }}>{v}</span></span> },
-              { key: 'pid', header: 'PID', mono: true, width: '70px' },
-              { key: 'parent', header: 'Parent', mono: true, width: '130px' },
-              { key: 'user', header: 'User', mono: true, width: '100px' },
-              { key: 'cpu', header: 'CPU %', align: 'right', mono: true, width: '80px' },
-              { key: 'mem', header: 'Mem MB', align: 'right', mono: true, width: '90px' },
-              { key: 'cmd', header: '', render: (v, r) => r.susp ? <ED.Badge tone="danger" square>Suspicious</ED.Badge> : null, width: '110px' },
-            ]}
-            rows={d.processes} />
-        )}
-        {tab === 'network' && (
-          <ED.Table rowKey="laddr" compact
-            columns={[
-              { key: 'proto', header: 'Proto', mono: true, width: '70px' },
-              { key: 'laddr', header: 'Local address', mono: true },
-              { key: 'raddr', header: 'Remote address', mono: true, primary: true },
-              { key: 'state', header: 'State', mono: true, width: '130px' },
-              { key: 'proc', header: 'Process', mono: true },
-              { key: 'flag', header: '', width: '110px', render: (v) => v ? <ED.Badge tone={FLAG_TONE[v] || 'neutral'} square>{v.toUpperCase()}</ED.Badge> : null },
-            ]}
-            rows={d.connections} />
-        )}
-        {tab === 'browser' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {d.browserHistory.map((h, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', background: 'var(--surface-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)', width: 56 }}>{h.t}</span>
-                <Icon name="Globe" size={15} style={{ color: 'var(--text-tertiary)' }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>{h.title}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.url}</div>
-                </div>
-                {h.flag && <ED.Badge tone={FLAG_TONE[h.flag]} square>{h.flag}</ED.Badge>}
-              </div>
-            ))}
-          </div>
-        )}
-        {tab === 'shell' && (
-          <div style={{ background: 'var(--surface-inset)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-            {d.shellHistory.map((h, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderBottom: i < d.shellHistory.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)', width: 56 }}>{h.t}</span>
-                <span style={{ color: 'var(--status-success)', fontFamily: 'var(--font-mono)', fontSize: 13 }}>$</span>
-                <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12.5, color: h.flag === 'malicious' ? 'var(--sev-critical)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.cmd}</code>
-                {h.flag && <ED.Badge tone={FLAG_TONE[h.flag]} square>{h.flag}</ED.Badge>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      <Card styles={{ body: { paddingTop: 4 } }}>
+        <Tabs activeKey={tab} onChange={setTab} items={items} />
+      </Card>
+    </Flex>
   );
 }
 

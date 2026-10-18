@@ -4,6 +4,9 @@
    opinionated element styling beyond the SOC console baseline.
    ============================================================ */
 
+/* Layered so antd component styles (layer `antd`) win over these resets. */
+@layer base {
+
 *, *::before, *::after { box-sizing: border-box; }
 
 body {
@@ -21,7 +24,7 @@ body {
 ::selection { background: rgba(53, 56, 212, 0.18); color: var(--text-primary); }
 
 a { color: var(--text-link); text-decoration: none; }
-a:hover { text-decoration: underline; }
+
 
 code, pre, kbd, samp { font-family: var(--font-mono); }
 
@@ -43,4 +46,5 @@ code, pre, kbd, samp { font-family: var(--font-mono); }
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }
+}
 }

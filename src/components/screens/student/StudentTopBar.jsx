@@ -1,42 +1,76 @@
 'use client';
-import React from 'react';
-import { IconButton, Avatar, Tooltip } from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import React, { useTransition } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { Layout, Menu, Avatar, Dropdown, Button, Flex, Typography, theme } from 'antd';
+import { HomeOutlined, AimOutlined, CompassOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons';
 import { logout } from '@/app/actions/auth';
 import { startTour } from '@/components/Tour';
+import { initials } from '@/components/shell/SideShell';
 
-/* Slim top bar for the student area: brand, identity, sign out. `left` renders
-   custom content (e.g. a back button + scenario title) in the workspace. */
+/* Student top bar: brand + primary nav (Dashboard / ATT&CK Explorer) + user
+   menu. `left` replaces the brand+nav with custom content (e.g. the scenario
+   workspace's back button + title). */
 export function StudentTopBar({ user, left }) {
+  const router = useRouter();
+  const pathname = usePathname() || '';
+  const [, startTransition] = useTransition();
+  const { token } = theme.useToken();
+  const name = user?.name || 'Student';
+  const selected = pathname.startsWith('/attack') ? '/attack' : '/learn';
+
+  const menu = {
+    items: [
+      { key: 'tour', icon: <CompassOutlined />, label: 'Replay walkthrough' },
+      { type: 'divider' },
+      { key: 'logout', icon: <LogoutOutlined />, label: 'Sign out', danger: true },
+    ],
+    onClick: ({ key }) => {
+      if (key === 'tour') startTour();
+      if (key === 'logout') startTransition(() => logout());
+    },
+  };
+
   return (
-    <header style={{
-      height: 'var(--topbar-h)', flex: 'none', display: 'flex', alignItems: 'center', gap: 14,
-      padding: '0 18px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--surface-panel)',
-    }}>
+    <Layout.Header
+      style={{
+        flex: 'none', display: 'flex', alignItems: 'center', gap: 16,
+        borderBottom: `1px solid ${token.colorBorderSecondary}`, paddingInline: 20,
+      }}
+    >
       {left ?? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/logo_img_white_background.png" alt="" style={{ height: 24, borderRadius: 5 }} />
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>Athena</span>
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>SOC Lab</span>
-        </div>
+        <>
+          <Link href="/learn" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <img src="/logo_img_white_background.png" alt="" style={{ height: 28, borderRadius: 6 }} />
+            <Typography.Text strong style={{ fontSize: 16 }}>Athena</Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>SOC Lab</Typography.Text>
+          </Link>
+          <Menu
+            mode="horizontal"
+            selectedKeys={[selected]}
+            onClick={({ key }) => router.push(key)}
+            items={[
+              { key: '/learn', icon: <HomeOutlined />, label: 'Dashboard' },
+              { key: '/attack', icon: <AimOutlined />, label: 'ATT&CK Explorer' },
+            ]}
+            style={{ flex: 1, minWidth: 0, borderBottom: 0, marginLeft: 12 }}
+          />
+        </>
       )}
-      <div style={{ flex: 1 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>{user?.name || 'Student'}</div>
-          {user?.cohort && <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{user.cohort}</div>}
-        </div>
-        <Avatar name={user?.name || 'Student'} size="sm" />
-        <Tooltip content="Walkthrough" placement="bottom">
-          <IconButton label="Walkthrough" onClick={startTour}><Icon name="Compass" size={16} /></IconButton>
-        </Tooltip>
-        <Tooltip content="Sign out" placement="bottom">
-          <form action={logout} style={{ display: 'inline-flex' }}>
-            <IconButton type="submit" label="Sign out"><Icon name="LogOut" size={16} /></IconButton>
-          </form>
-        </Tooltip>
-      </div>
-    </header>
+      {left && <div style={{ flex: 1 }} />}
+      <Dropdown menu={menu} trigger={['click']} placement="bottomRight">
+        <Button type="text" style={{ height: 44, padding: '0 8px' }}>
+          <Flex align="center" gap={10}>
+            <div style={{ textAlign: 'right', lineHeight: 1.2 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{name}</div>
+              {user?.cohort && <div style={{ fontSize: 11, color: token.colorTextTertiary }}>{user.cohort}</div>}
+            </div>
+            <Avatar style={{ background: token.colorPrimary }}>{initials(name)}</Avatar>
+            <DownOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
+          </Flex>
+        </Button>
+      </Dropdown>
+    </Layout.Header>
   );
 }
 

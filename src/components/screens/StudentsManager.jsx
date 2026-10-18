@@ -1,21 +1,26 @@
 'use client';
-import React, { useState, useTransition, useActionState } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import React, { useMemo, useState, useTransition, useActionState } from 'react';
+import {
+  Alert, App, Button, Card, Descriptions, Empty, Flex, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography,
+} from 'antd';
+import {
+  UserAddOutlined, UsergroupAddOutlined, SearchOutlined, KeyOutlined, DeleteOutlined, ReloadOutlined, UserOutlined,
+  MailOutlined, CopyOutlined, CheckOutlined, TeamOutlined,
+} from '@ant-design/icons';
 import { createStudent, bulkCreateStudents, resetStudentPassword, deleteStudent } from '@/app/actions/students';
 import { generatePassword } from '@/lib/password-gen';
+import { FormLayout, Page } from './settings/parts';
 
 /* Student Management surface. Data (the `students` list) comes from the server
    page; mutations go through Server Actions which revalidate the list. */
 export function StudentsManager({ students, cohorts = [] }) {
+  const { message } = App.useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [createError, setCreateError] = useState(null);
   const [creating, startCreate] = useTransition();
   const [cred, setCred] = useState(null);      // { title, email, password }
-  const [confirmDel, setConfirmDel] = useState(null); // student row
   const [busyId, setBusyId] = useState(null);
-  const [error, setError] = useState(null);
   const [query, setQuery] = useState('');
   const [cohortSel, setCohortSel] = useState('');
   const [pwd, setPwd] = useState('');
@@ -39,197 +44,185 @@ export function StudentsManager({ students, cohorts = [] }) {
   };
 
   const onReset = async (student) => {
-    setError(null);
     setBusyId(student.id);
     const res = await resetStudentPassword(student.id);
     setBusyId(null);
-    if (res?.error) setError(res.error);
+    if (res?.error) message.error(res.error);
     else setCred({ title: `New password for ${student.name}`, email: student.email, password: res.password });
   };
 
-  const onDelete = async () => {
-    const student = confirmDel;
-    setConfirmDel(null);
-    setError(null);
+  const onDelete = async (student) => {
     setBusyId(student.id);
     const res = await deleteStudent(student.id);
     setBusyId(null);
-    if (res?.error) setError(res.error);
+    if (res?.error) message.error(res.error);
+    else message.success(`${student.name} deleted.`);
   };
 
-  const filtered = students.filter((s) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
-  });
+    return students.filter((s) => !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+  }, [students, query]);
+
+  const cohortFilters = useMemo(
+    () => [...new Set(students.map((s) => s.cohort))].sort().map((c) => ({ text: c, value: c })),
+    [students],
+  );
+
+  const columns = [
+    {
+      title: 'Name', dataIndex: 'name', key: 'name',
+      sorter: (a, b) => a.name.localeCompare(b.name),
+      render: (v) => <Typography.Text strong>{v}</Typography.Text>,
+    },
+    { title: 'Email', dataIndex: 'email', key: 'email', render: (v) => <Typography.Text copyable={{ text: v }}>{v}</Typography.Text> },
+    {
+      title: 'Cohort', dataIndex: 'cohort', key: 'cohort', width: 180,
+      filters: cohortFilters, onFilter: (value, row) => row.cohort === value,
+    },
+    {
+      title: 'Added', dataIndex: 'createdAt', key: 'createdAt', width: 120,
+      sorter: (a, b) => a.createdAt.localeCompare(b.createdAt), defaultSortOrder: 'descend',
+      render: (v) => new Date(v).toISOString().slice(0, 10),
+    },
+    {
+      title: '', key: 'actions', width: 200, align: 'right',
+      render: (_v, row) => (
+        <Space size={4}>
+          <Popconfirm
+            title="Reset password?"
+            description={`Generates a new password for ${row.name}; the old one stops working.`}
+            okText="Reset"
+            onConfirm={() => onReset(row)}
+          >
+            <Button size="small" type="text" loading={busyId === row.id} icon={<KeyOutlined />}>Reset</Button>
+          </Popconfirm>
+          <Popconfirm
+            title="Delete student?"
+            description={`${row.name} (${row.email}) will lose access immediately. This cannot be undone.`}
+            okText="Delete student"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => onDelete(row)}
+          >
+            <Button size="small" type="text" danger disabled={busyId === row.id} icon={<DeleteOutlined />}>Delete</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   return (
-    <div style={{ padding: 24, maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>Students</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>
-            {students.length} {students.length === 1 ? 'account' : 'accounts'} · provisioned by instructors
-          </p>
-        </div>
-        <div style={{ width: 240 }}>
-          <AC.Input size="sm" placeholder="Search name or email…" value={query} onChange={(e) => setQuery(e.target.value)} leadingIcon={<Icon name="Search" size={15} />} />
-        </div>
-        <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="Users" size={14} />} onClick={() => setBulkOpen(true)}>
-          Bulk add
-        </AC.Button>
-        <AC.Button variant="primary" size="sm" leadingIcon={<Icon name="UserPlus" size={14} />} onClick={openCreate}>
-          Add student
-        </AC.Button>
-      </div>
-
-      {error && (
-        <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />
-      )}
-
-      <AC.Card padded={false}>
-        {filtered.length === 0 ? (
-          <div style={{ padding: 8 }}>
-            <AC.EmptyState
-              icon={<Icon name="Users" size={24} />}
-              title={students.length === 0 ? 'No students yet' : 'No matches'}
-              description={students.length === 0 ? 'Add your first student to get them into the lab.' : 'Try a different search.'}
-              actions={students.length === 0 ? <AC.Button variant="primary" size="sm" onClick={openCreate}>Add student</AC.Button> : null}
-            />
-          </div>
-        ) : (
-          <AC.Table
-            rowKey="id"
-            hover={false}
-            columns={[
-              { key: 'name', header: 'Name', primary: true },
-              { key: 'email', header: 'Email', mono: true },
-              { key: 'cohort', header: 'Cohort', width: '160px' },
-              { key: 'createdAt', header: 'Added', width: '120px', mono: true, render: (v) => new Date(v).toISOString().slice(0, 10) },
-              {
-                key: 'id', header: '', width: '210px', align: 'right',
-                render: (_v, row) => (
-                  <div style={{ display: 'inline-flex', gap: 6 }}>
-                    <AC.Button variant="ghost" size="sm" loading={busyId === row.id} leadingIcon={<Icon name="KeyRound" size={14} />} onClick={() => onReset(row)}>
-                      Reset
-                    </AC.Button>
-                    <AC.Button variant="outline-danger" size="sm" disabled={busyId === row.id} leadingIcon={<Icon name="Trash2" size={14} />} onClick={() => setConfirmDel(row)}>
-                      Delete
-                    </AC.Button>
-                  </div>
-                ),
-              },
-            ]}
-            rows={filtered}
-          />
-        )}
-      </AC.Card>
+    <Page
+      title="Students"
+      description={`${students.length} ${students.length === 1 ? 'account' : 'accounts'} · provisioned by instructors`}
+      extra={<>
+        <Input allowClear prefix={<SearchOutlined />} placeholder="Search name or email…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ width: 240 }} />
+        <Button icon={<UsergroupAddOutlined />} onClick={() => setBulkOpen(true)}>Bulk add</Button>
+        <Button type="primary" icon={<UserAddOutlined />} onClick={openCreate}>Add student</Button>
+      </>}
+    >
+      <Card styles={{ body: { padding: 0 } }}>
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filtered}
+          pagination={{ pageSize: 20, hideOnSinglePage: true, showTotal: (t) => `${t} students` }}
+          locale={{
+            emptyText: (
+              <Empty description={students.length === 0 ? 'No students yet — add your first student to get them into the lab.' : 'No matches. Try a different search.'}>
+                {students.length === 0 && <Button type="primary" onClick={openCreate}>Add student</Button>}
+              </Empty>
+            ),
+          }}
+        />
+      </Card>
 
       {/* Create dialog */}
-      <AC.Dialog
+      <Modal
         open={createOpen}
         title="Add student"
-        description="Generate a password or type your own — it's shown once after creating."
-        icon={<Icon name="UserPlus" size={18} />}
-        onClose={() => setCreateOpen(false)}
+        onCancel={() => setCreateOpen(false)}
+        destroyOnHidden
+        okText="Create student"
+        okButtonProps={{ htmlType: 'submit', form: 'student-create', icon: <UserAddOutlined /> }}
+        confirmLoading={creating}
       >
-        <form onSubmit={onCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <AC.Input label="Full name" name="name" placeholder="e.g. Amara Okafor" required leadingIcon={<Icon name="User" size={16} />} />
-          <AC.Input label="Email" name="email" type="email" placeholder="student@zaio.io" required leadingIcon={<Icon name="Mail" size={16} />} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Password</label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <AC.Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} mono placeholder="At least 10 characters" leadingIcon={<Icon name="KeyRound" size={16} />} />
-              </div>
-              <AC.Button type="button" variant="secondary" leadingIcon={<Icon name="RefreshCw" size={14} />} onClick={() => setPwd(generatePassword())}>Generate</AC.Button>
-            </div>
-            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>Shown once after creating — copy it then. Or type your own.</span>
-          </div>
-          <AC.Select
-            label="Cohort (optional)"
-            value={cohortSel}
-            onChange={(e) => setCohortSel(e.target.value)}
-            options={[{ value: '', label: 'No cohort' }, ...cohorts.map((c) => ({ value: c.id, label: c.name })), { value: '__new__', label: '＋ New cohort…' }]}
-          />
-          {cohortSel === '__new__'
-            ? <AC.Input name="newCohortName" placeholder="New cohort name" required leadingIcon={<Icon name="GraduationCap" size={16} />} />
-            : <input type="hidden" name="cohortId" value={cohortSel} />}
-          {createError && (
-            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
-              <Icon name="TriangleAlert" size={15} /> {createError}
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <AC.Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>Cancel</AC.Button>
-            <AC.Button type="submit" variant="primary" loading={creating} leadingIcon={<Icon name="UserPlus" size={14} />}>Create student</AC.Button>
-          </div>
+        <Typography.Paragraph type="secondary">Generate a password or type your own — it&apos;s shown once after creating.</Typography.Paragraph>
+        <form id="student-create" onSubmit={onCreateSubmit}>
+          <FormLayout>
+            <Form.Item label="Full name" required>
+              <Input name="name" placeholder="e.g. Amara Okafor" required prefix={<UserOutlined />} />
+            </Form.Item>
+            <Form.Item label="Email" required>
+              <Input name="email" type="email" placeholder="student@zaio.io" required prefix={<MailOutlined />} />
+            </Form.Item>
+            <Form.Item label="Password" extra="Shown once after creating — copy it then. Or type your own.">
+              <Space.Compact style={{ width: '100%' }}>
+                <Input name="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="At least 10 characters" prefix={<KeyOutlined />} />
+                <Button icon={<ReloadOutlined />} onClick={() => setPwd(generatePassword())}>Generate</Button>
+              </Space.Compact>
+            </Form.Item>
+            <CohortPicker cohorts={cohorts} value={cohortSel} onChange={setCohortSel} />
+          </FormLayout>
+          {createError && <Alert type="error" showIcon title={createError} />}
         </form>
-      </AC.Dialog>
+      </Modal>
 
-      {/* Generated-credentials dialog (create + reset). `key` resets the copied
-          state whenever a new credential is revealed. */}
-      <CredentialDialog key={cred ? cred.password : 'none'} cred={cred} onClose={() => setCred(null)} />
+      {/* Generated-credentials dialog (create + reset). */}
+      <CredentialDialog cred={cred} onClose={() => setCred(null)} />
 
       {bulkOpen && <BulkAddDialog cohorts={cohorts} onClose={() => setBulkOpen(false)} />}
+    </Page>
+  );
+}
 
-      {/* Delete confirm dialog */}
-      <AC.Dialog
-        open={!!confirmDel}
-        title="Delete student?"
-        description={confirmDel ? `${confirmDel.name} (${confirmDel.email}) will lose access immediately. This cannot be undone.` : ''}
-        icon={<Icon name="Trash2" size={18} />}
-        onClose={() => setConfirmDel(null)}
-        footer={
-          <>
-            <AC.Button variant="ghost" onClick={() => setConfirmDel(null)}>Cancel</AC.Button>
-            <AC.Button variant="danger" leadingIcon={<Icon name="Trash2" size={14} />} onClick={onDelete}>Delete student</AC.Button>
-          </>
-        }
-      />
-    </div>
+/* Cohort select + "new cohort" name. Posts `cohortId` (or `newCohortName`). */
+function CohortPicker({ cohorts, value, onChange }) {
+  return (
+    <>
+      <Form.Item label="Cohort (optional)">
+        <Select
+          value={value}
+          onChange={onChange}
+          showSearch={{ optionFilterProp: 'label' }}
+          options={[{ value: '', label: 'No cohort' }, ...cohorts.map((c) => ({ value: c.id, label: c.name })), { value: '__new__', label: '＋ New cohort…' }]}
+        />
+      </Form.Item>
+      {value === '__new__'
+        ? (
+          <Form.Item label="New cohort name" required>
+            <Input name="newCohortName" placeholder="New cohort name" required prefix={<TeamOutlined />} />
+          </Form.Item>
+        )
+        : <input type="hidden" name="cohortId" value={value} />}
+    </>
   );
 }
 
 function CredentialDialog({ cred, onClose }) {
-  const [copied, setCopied] = useState(false);
-  if (!cred) return null;
-
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(cred.password); setCopied(true); } catch { /* clipboard blocked */ }
-  };
-
-  const field = (label, value, mono) => (
-    <div>
-      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: mono ? 'var(--font-mono)' : 'var(--font-sans)', fontSize: 14, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{value}</div>
-    </div>
-  );
-
   return (
-    <AC.Dialog
-      open
-      title={cred.title}
-      description="Copy this password now — it is shown only once and cannot be recovered, only reset."
-      icon={<Icon name="KeyRound" size={18} />}
-      onClose={onClose}
-      footer={
-        <>
-          <AC.Button variant="secondary" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copy}>
-            {copied ? 'Copied' : 'Copy password'}
-          </AC.Button>
-          <AC.Button variant="primary" onClick={onClose}>Done</AC.Button>
-        </>
-      }
+    <Modal
+      open={!!cred}
+      title={<Flex align="center" gap={8}><KeyOutlined />{cred?.title}</Flex>}
+      onCancel={onClose}
+      destroyOnHidden
+      footer={<Button type="primary" onClick={onClose}>Done</Button>}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)' }}>
-        {field('Email', cred.email, true)}
-        {field('Password', cred.password, true)}
-      </div>
-    </AC.Dialog>
+      {cred && (
+        <Flex vertical gap={12}>
+          <Alert type="warning" showIcon title="Copy this password now — it is shown only once and cannot be recovered, only reset." />
+          <Descriptions bordered column={1} size="small" items={[
+            { key: 'email', label: 'Email', children: <Typography.Text code copyable>{cred.email}</Typography.Text> },
+            { key: 'password', label: 'Password', children: <Typography.Text code copyable={{ tooltips: ['Copy password', 'Copied'] }}>{cred.password}</Typography.Text> },
+          ]} />
+        </Flex>
+      )}
+    </Modal>
   );
 }
 
 function BulkAddDialog({ cohorts, onClose }) {
+  const { message } = App.useApp();
   const [state, action, pending] = useActionState(bulkCreateStudents, {});
   const [cohortSel, setCohortSel] = useState('');
   const [copied, setCopied] = useState(false);
@@ -237,71 +230,67 @@ function BulkAddDialog({ cohorts, onClose }) {
 
   const copyList = async () => {
     const text = (state.created || []).map((c) => `${c.email}\t${c.password}`).join('\n');
-    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { /* clipboard blocked */ }
+    try { await navigator.clipboard.writeText(text); setCopied(true); message.success('Copied to clipboard'); } catch { /* clipboard blocked */ }
   };
 
   return (
-    <AC.Dialog
+    <Modal
       open
+      width={600}
       title="Bulk add students"
-      description="Paste emails (one per line). Each gets an account whose password is its email with a capital first letter; they set their name on first login."
-      icon={<Icon name="Users" size={18} />}
-      onClose={onClose}
+      onCancel={onClose}
+      destroyOnHidden
+      footer={done ? (
+        <Space>
+          {state.created?.length > 0 && <Button icon={copied ? <CheckOutlined /> : <CopyOutlined />} onClick={copyList}>{copied ? 'Copied' : 'Copy list'}</Button>}
+          <Button type="primary" onClick={onClose}>Done</Button>
+        </Space>
+      ) : (
+        <Space>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="primary" htmlType="submit" form="bulk-add" loading={pending} icon={<UsergroupAddOutlined />}>Create accounts</Button>
+        </Space>
+      )}
     >
       {done ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-success, #16a34a)' }}>
-            <Icon name="CircleCheck" size={16} /> {state.ok}
-          </div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', lineHeight: 1.55 }}>
-            Each password is the student’s email with a capital first letter — e.g. <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>ada@zaio.io</span> → <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>Ada@zaio.io</span>. They’ll set their name (and can change the password) on first login.
-          </div>
+        <Flex vertical gap={12}>
+          <Alert type="success" showIcon title={state.ok} />
+          <Typography.Text type="secondary">
+            Each password is the student’s email with a capital first letter — e.g. <Typography.Text code>ada@zaio.io</Typography.Text> → <Typography.Text code>Ada@zaio.io</Typography.Text>. They’ll set their name (and can change the password) on first login.
+          </Typography.Text>
           {state.created?.length > 0 && (
-            <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)' }}>
-              {state.created.map((c) => (
-                <div key={c.email} style={{ display: 'flex', gap: 10, padding: '6px 10px', fontFamily: 'var(--font-mono)', fontSize: 12, borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ flex: 1, color: 'var(--text-primary)' }}>{c.email}</span>
-                  <span style={{ color: 'var(--text-tertiary)' }}>{c.password}</span>
-                </div>
-              ))}
-            </div>
+            <Table
+              size="small"
+              rowKey="email"
+              bordered
+              pagination={false}
+              scroll={{ y: 220 }}
+              dataSource={state.created}
+              columns={[
+                { title: 'Email', dataIndex: 'email', key: 'email' },
+                { title: 'Password', dataIndex: 'password', key: 'password', render: (v) => <Typography.Text code>{v}</Typography.Text> },
+              ]}
+            />
           )}
           {state.skipped?.length > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Skipped ({state.skipped.length}): {state.skipped.join(', ')}</div>
+            <Alert type="info" showIcon title={`Skipped (${state.skipped.length})`} description={state.skipped.join(', ')} />
           )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            {state.created?.length > 0 && <AC.Button variant="secondary" leadingIcon={<Icon name={copied ? 'Check' : 'Copy'} size={14} />} onClick={copyList}>{copied ? 'Copied' : 'Copy list'}</AC.Button>}
-            <AC.Button variant="primary" onClick={onClose}>Done</AC.Button>
-          </div>
-        </div>
+        </Flex>
       ) : (
-        <form action={action} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Emails (one per line)</label>
-            <textarea name="emails" rows={8} required spellCheck={false} placeholder={'ada@zaio.io\nalan@zaio.io\ngrace@zaio.io'}
-              style={{ width: '100%', resize: 'vertical', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-inset)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.5 }} />
-          </div>
-          <AC.Select
-            label="Cohort (optional)"
-            value={cohortSel}
-            onChange={(e) => setCohortSel(e.target.value)}
-            options={[{ value: '', label: 'No cohort' }, ...cohorts.map((c) => ({ value: c.id, label: c.name })), { value: '__new__', label: '＋ New cohort…' }]}
-          />
-          {cohortSel === '__new__'
-            ? <AC.Input name="newCohortName" placeholder="New cohort name" required leadingIcon={<Icon name="GraduationCap" size={16} />} />
-            : <input type="hidden" name="cohortId" value={cohortSel} />}
-          {state?.error && (
-            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--status-danger, #ef4444)' }}>
-              <Icon name="TriangleAlert" size={15} /> {state.error}
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <AC.Button type="button" variant="ghost" onClick={onClose}>Cancel</AC.Button>
-            <AC.Button type="submit" variant="primary" loading={pending} leadingIcon={<Icon name="Users" size={14} />}>Create accounts</AC.Button>
-          </div>
+        <form id="bulk-add" action={action}>
+          <Typography.Paragraph type="secondary">
+            Paste emails (one per line). Each gets an account whose password is its email with a capital first letter; they set their name on first login.
+          </Typography.Paragraph>
+          <FormLayout>
+            <Form.Item label="Emails (one per line)" required>
+              <Input.TextArea name="emails" rows={8} required spellCheck={false} placeholder={'ada@zaio.io\nalan@zaio.io\ngrace@zaio.io'} />
+            </Form.Item>
+            <CohortPicker cohorts={cohorts} value={cohortSel} onChange={setCohortSel} />
+          </FormLayout>
+          {state?.error && <Alert type="error" showIcon title={state.error} />}
         </form>
       )}
-    </AC.Dialog>
+    </Modal>
   );
 }
 

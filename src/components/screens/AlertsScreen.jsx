@@ -1,112 +1,146 @@
 'use client';
 import React from 'react';
+import { Row, Col, Card, Table, Badge, Segmented, Input, Button, Drawer, Descriptions, Timeline, Flex, Space, Typography, theme } from 'antd';
+import { ReloadOutlined, UserAddOutlined, RiseOutlined, FileSearchOutlined, ThunderboltOutlined, BranchesOutlined, RadarChartOutlined, BellOutlined, ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import { SEVERITY } from '@/theme/antdTheme';
 import { AthenaData } from '@/lib/data';
 
-/* Alerts queue — triage, assign, escalate. Table + detail panel. */
+/* Alerts queue — triage, assign, escalate. Table + detail drawer. */
 const STATUS_META = {
-  open: { tone: 'brand', label: 'Open' },
-  in_progress: { tone: 'accent', label: 'In progress' },
-  escalated: { tone: 'danger', label: 'Escalated' },
-  resolved: { tone: 'success', label: 'Resolved' },
+  open: { status: 'processing', label: 'Open' },
+  in_progress: { status: 'warning', label: 'In progress' },
+  escalated: { status: 'error', label: 'Escalated' },
+  resolved: { status: 'success', label: 'Resolved' },
 };
+
+const SEV_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+];
+
+function Mono({ children }) {
+  const { token } = theme.useToken();
+  return <span style={{ fontFamily: token.fontFamilyCode, fontSize: 12.5 }}>{children}</span>;
+}
 
 function AlertDetail({ a, onClose }) {
   return (
-    <aside style={{
-      width: 380, flex: 'none', borderLeft: '1px solid var(--border-subtle)', background: 'var(--surface-panel)',
-      display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }}>
-      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+    <Drawer
+      open={!!a}
+      onClose={onClose}
+      size={420}
+      title={a && (
+        <Space orientation="vertical" size={6}>
+          <Space size={8}>
             <AC.SeverityBadge level={a.sev} solid />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-tertiary)' }}>{a.id}</span>
-          </div>
-          <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>{a.rule}</h3>
-        </div>
-        <AC.IconButton label="Close" onClick={onClose}><Icon name="X" size={18} /></AC.IconButton>
-      </div>
-
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px', marginBottom: 18 }}>
-          {[['Detected', a.time], ['Host', a.host], ['Source IP', a.src], ['Destination', a.dst], ['Tactic', a.tactic], ['Technique', a.technique], ['Events', String(a.count)], ['Assignee', a.assignee || 'Unassigned']].map(([k, v]) => (
-            <div key={k}>
-              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', marginBottom: 3 }}>{k}</div>
-              <div style={{ fontFamily: /IP|Host|Detected|Technique|Events/.test(k) ? 'var(--font-mono)' : 'var(--font-sans)', fontSize: 13, color: 'var(--text-primary)' }}>{v}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-tertiary)', margin: '4px 0 8px' }}>Triage timeline</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-          {[['Rule matched', a.time, 'Zap'], ['Correlated with 2 alerts', '14:32', 'GitMerge'], ['Enriched with threat intel', '14:32', 'Radar']].map(([t, tm, ic], i, arr) => (
-            <div key={i} style={{ display: 'flex', gap: 11 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <span style={{ width: 24, height: 24, borderRadius: 999, background: 'var(--surface-raised)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-strong)' }}><Icon name={ic} size={12} /></span>
-                {i < arr.length - 1 && <span style={{ width: 1, flex: 1, background: 'var(--border-default)', minHeight: 14 }} />}
-              </div>
-              <div style={{ paddingBottom: 14 }}>
-                <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{t}</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)' }}>{tm}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ padding: '14px 18px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <AC.Button variant="primary" size="sm" leadingIcon={<Icon name="UserCheck" size={14} />}>Assign to me</AC.Button>
-        <AC.Button variant="accent" size="sm" leadingIcon={<Icon name="TrendingUp" size={14} />}>Escalate</AC.Button>
-        <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="ScrollText" size={14} />}>View in Logs</AC.Button>
-      </div>
-    </aside>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}><Mono>{a.id}</Mono></Typography.Text>
+          </Space>
+          <span>{a.rule}</span>
+        </Space>
+      )}
+      footer={
+        <Flex gap={8} wrap>
+          <Button type="primary" icon={<UserAddOutlined />}>Assign to me</Button>
+          <AC.Button variant="accent" type="button" leadingIcon={<RiseOutlined />}>Escalate</AC.Button>
+          <Button icon={<FileSearchOutlined />}>View in Logs</Button>
+        </Flex>
+      }
+    >
+      {a && (
+        <>
+          <Descriptions
+            column={2}
+            size="small"
+            layout="vertical"
+            colon={false}
+            items={[
+              { key: 'detected', label: 'Detected', children: <Mono>{a.time}</Mono> },
+              { key: 'host', label: 'Host', children: <Mono>{a.host}</Mono> },
+              { key: 'src', label: 'Source IP', children: <Mono>{a.src}</Mono> },
+              { key: 'dst', label: 'Destination', children: a.dst },
+              { key: 'tactic', label: 'Tactic', children: a.tactic },
+              { key: 'technique', label: 'Technique', children: <Mono>{a.technique}</Mono> },
+              { key: 'events', label: 'Events', children: <Mono>{String(a.count)}</Mono> },
+              { key: 'assignee', label: 'Assignee', children: a.assignee || 'Unassigned' },
+            ]}
+          />
+          <Typography.Title level={5} style={{ marginTop: 8 }}>Triage timeline</Typography.Title>
+          <Timeline
+            items={[
+              { icon: <ThunderboltOutlined />, title: 'Rule matched', content: <Typography.Text type="secondary"><Mono>{a.time}</Mono></Typography.Text> },
+              { icon: <BranchesOutlined />, title: 'Correlated with 2 alerts', content: <Typography.Text type="secondary"><Mono>14:32</Mono></Typography.Text> },
+              { icon: <RadarChartOutlined />, title: 'Enriched with threat intel', content: <Typography.Text type="secondary"><Mono>14:32</Mono></Typography.Text> },
+            ]}
+          />
+        </>
+      )}
+    </Drawer>
   );
 }
 
 export function AlertsScreen() {
   const alerts = AthenaData.alerts;
-  const [sel, setSel] = React.useState(alerts[0]);
+  const [sel, setSel] = React.useState(null);
   const [sev, setSev] = React.useState('all');
   const rows = sev === 'all' ? alerts : alerts.filter((a) => a.sev === sev);
   const counts = { critical: 0, high: 0, medium: 0, low: 0 };
   alerts.forEach((a) => { if (counts[a.sev] != null) counts[a.sev]++; });
 
+  const columns = [
+    { key: 'sev', dataIndex: 'sev', title: 'Severity', width: 120, render: (v) => <AC.SeverityBadge level={v} /> },
+    { key: 'time', dataIndex: 'time', title: 'Detected', width: 170, render: (v) => <Mono>{v}</Mono> },
+    { key: 'rule', dataIndex: 'rule', title: 'Rule', render: (v) => <Typography.Text strong>{v}</Typography.Text> },
+    { key: 'host', dataIndex: 'host', title: 'Host', width: 120, render: (v) => <Mono>{v}</Mono> },
+    { key: 'status', dataIndex: 'status', title: 'Status', width: 130, render: (v) => <Badge status={STATUS_META[v].status} text={STATUS_META[v].label} /> },
+    { key: 'count', dataIndex: 'count', title: 'Events', width: 90, align: 'right', render: (v) => <Mono>{v}</Mono> },
+  ];
+
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: '20px 24px', gap: 16, overflow: 'auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          <AC.StatCard label="Open alerts" value={String(alerts.filter((a) => a.status === 'open').length)} icon={<Icon name="Bell" size={16} />} delta="+3" deltaDir="up" hint="last hour" />
+    <Flex vertical gap={16} style={{ padding: 24 }}>
+      <AC.PageHeader title="Alerts" description="Triage, assign and escalate detections from across the lab." />
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} xl={6}>
+          <AC.StatCard label="Open alerts" value={String(alerts.filter((a) => a.status === 'open').length)} icon={<BellOutlined />} delta="+3" deltaDir="up" hint="last hour" />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
           <AC.StatCard label="Critical" value={String(counts.critical)} tone="critical" delta="+1" deltaDir="up" />
-          <AC.StatCard label="Assigned to me" value="2" icon={<Icon name="UserCheck" size={16} />} />
-          <AC.StatCard label="Median triage" value="4m 12s" icon={<Icon name="Timer" size={16} />} deltaDir="down" delta="-38s" hint="better" />
-        </div>
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <AC.StatCard label="Assigned to me" value="2" icon={<UserOutlined />} />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <AC.StatCard label="Median triage" value="4m 12s" icon={<ClockCircleOutlined />} deltaDir="down" delta="-38s" hint="better" />
+        </Col>
+      </Row>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <AC.Tabs variant="pill" value={sev} onChange={setSev} tabs={[{ id: 'all', label: 'All' }, { id: 'critical', label: 'Critical' }, { id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }]} />
-          <div style={{ flex: 1 }} />
-          <AC.Input size="sm" placeholder="Filter alerts…" leadingIcon={<Icon name="Search" size={15} />} />
-          <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="RotateCw" size={14} />}>Refresh</AC.Button>
-        </div>
-
-        <AC.Table
+      <Card
+        title={<Segmented value={sev} onChange={setSev} options={SEV_FILTERS.map((f) => ({ ...f, label: f.value === 'all' ? f.label : <Space size={6}><Badge color={SEVERITY[f.value].hex} />{f.label}</Space> }))} />}
+        extra={
+          <Space>
+            <Input.Search placeholder="Filter alerts…" allowClear style={{ width: 220 }} />
+            <Button icon={<ReloadOutlined />}>Refresh</Button>
+          </Space>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table
           rowKey="id"
-          selectedKey={sel && sel.id}
-          onRowClick={setSel}
-          columns={[
-            { key: 'sev', header: 'Severity', width: '112px', render: (v) => <AC.SeverityBadge level={v} /> },
-            { key: 'time', header: 'Detected', mono: true, width: '160px' },
-            { key: 'rule', header: 'Rule', primary: true },
-            { key: 'host', header: 'Host', mono: true, width: '110px' },
-            { key: 'status', header: 'Status', width: '120px', render: (v) => <AC.Badge tone={STATUS_META[v].tone} dot square>{STATUS_META[v].label}</AC.Badge> },
-            { key: 'count', header: 'Events', align: 'right', mono: true, width: '80px' },
-          ]}
-          rows={rows}
+          columns={columns}
+          dataSource={rows}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+          rowClassName={(r) => (sel && sel.id === r.id ? 'ant-table-row-selected' : '')}
+          onRow={(r) => ({ onClick: () => setSel(r), style: { cursor: 'pointer' } })}
         />
-      </div>
-      {sel && <AlertDetail a={sel} onClose={() => setSel(null)} />}
-    </div>
+      </Card>
+
+      <AlertDetail a={sel} onClose={() => setSel(null)} />
+    </Flex>
   );
 }
 

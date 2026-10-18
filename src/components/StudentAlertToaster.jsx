@@ -1,29 +1,41 @@
 'use client';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import * as AC from '@/components/ds';
+import { App } from 'antd';
+import { BellOutlined } from '@ant-design/icons';
 
 /* App-wide live alert notifications for students. Polls the active run and
-   raises a toast for each newly-fired alert — so alerts surface no matter which
-   page the student is on. The current backlog is seeded silently on first sight
-   so history doesn't flood in; only alerts that fire afterwards toast. */
+   raises a notification for each newly-fired alert — so alerts surface no matter
+   which page the student is on. The current backlog is seeded silently on first
+   sight so history doesn't flood in; only alerts that fire afterwards notify.
+   Clicking a notification opens the scenario. */
 const POLL_MS = 6000;
-const AUTO_DISMISS_MS = 8000;
+const AUTO_DISMISS_S = 8;
 const MAX_VISIBLE = 4;
 
 export function StudentAlertToaster() {
   const router = useRouter();
-  const [toasts, setToasts] = useState([]);
+  const { notification } = App.useApp();
   const seen = useRef(new Set());
   const activeScenario = useRef(null);
-
-  const remove = (id) => setToasts((t) => t.filter((x) => x.id !== id));
+  const visible = useRef([]); // keys currently shown, oldest first (cap at MAX_VISIBLE)
 
   useEffect(() => {
     let active = true;
     const push = (t) => {
-      setToasts((cur) => [...cur, t].slice(-MAX_VISIBLE));
-      setTimeout(() => { if (active) remove(t.id); }, AUTO_DISMISS_MS);
+      visible.current.push(t.id);
+      while (visible.current.length > MAX_VISIBLE) notification.destroy(visible.current.shift());
+      notification.info({
+        key: t.id,
+        placement: 'topRight',
+        duration: AUTO_DISMISS_S,
+        icon: <BellOutlined />,
+        title: `New alert · ${t.scenarioTitle}`,
+        description: `${t.alert}${t.host ? ` — ${t.host}` : ''}`,
+        style: { cursor: 'pointer' },
+        onClick: () => { notification.destroy(t.id); router.push(`/learn/${t.scenarioId}`); },
+        onClose: () => { visible.current = visible.current.filter((k) => k !== t.id); },
+      });
     };
 
     const tick = async () => {
@@ -56,23 +68,9 @@ export function StudentAlertToaster() {
     tick();
     const timer = setInterval(tick, POLL_MS);
     return () => { active = false; clearInterval(timer); };
-  }, []);
+  }, [notification, router]);
 
-  if (toasts.length === 0) return null;
-  return (
-    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 60, display: 'flex', flexDirection: 'column', gap: 10, width: 'min(92vw, 380px)' }}>
-      {toasts.map((t) => (
-        <div key={t.id} onClick={() => router.push(`/learn/${t.scenarioId}`)} style={{ cursor: 'pointer' }} role="link" title="Open scenario">
-          <AC.Toast
-            tone="info"
-            title={`New alert · ${t.scenarioTitle}`}
-            message={`${t.alert}${t.host ? ` — ${t.host}` : ''}`}
-            onClose={(e) => { e?.stopPropagation?.(); remove(t.id); }}
-          />
-        </div>
-      ))}
-    </div>
-  );
+  return null;
 }
 
 export default StudentAlertToaster;

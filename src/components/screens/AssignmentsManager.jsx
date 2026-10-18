@@ -1,21 +1,27 @@
 'use client';
 import React, { useState, useMemo, useTransition } from 'react';
-import * as AC from '@/components/ds';
-import { Icon } from '@/components/Icon';
+import {
+  Alert, App, Avatar, Button, Card, Col, DatePicker, Empty, Flex, Form, List, Modal, Popconfirm, Row, Table, Tag,
+  Tooltip, Typography,
+} from 'antd';
+import { UserAddOutlined, ClockCircleOutlined, CloseOutlined, ProfileOutlined } from '@ant-design/icons';
 import { assignScenario, unassignScenario } from '@/app/actions/assignments';
+import { SEVERITY } from '@/theme/antdTheme';
+import { initials } from '@/components/shell/SideShell';
+import { FormLayout, Page } from './settings/parts';
 
 const STATUS_META = {
-  ASSIGNED: { tone: 'brand', label: 'Assigned' },
-  IN_PROGRESS: { tone: 'accent', label: 'In progress' },
-  COMPLETED: { tone: 'success', label: 'Completed' },
+  ASSIGNED: { color: 'blue', label: 'Assigned' },
+  IN_PROGRESS: { color: 'purple', label: 'In progress' },
+  COMPLETED: { color: 'success', label: 'Completed' },
 };
 
 /* Assignment Scenarios: browse the scenario catalog and assign scenarios to
    students. Data comes from the server page; mutations are Server Actions that
    revalidate this route. */
 export function AssignmentsManager({ scenarios, students, assignments }) {
+  const { message } = App.useApp();
   const [assignFor, setAssignFor] = useState(null); // scenario being assigned
-  const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null); // assignment id being removed
 
   // scenarioId -> assignment rows
@@ -26,92 +32,87 @@ export function AssignmentsManager({ scenarios, students, assignments }) {
   }, [assignments]);
 
   const onRemove = async (assignment) => {
-    setError(null);
     setBusyId(assignment.id);
     const res = await unassignScenario(assignment.id);
     setBusyId(null);
-    if (res?.error) setError(res.error);
+    if (res?.error) message.error(res.error);
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1120, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 2px' }}>Assignment Scenarios</h2>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: 0 }}>
-            {scenarios.length} scenarios · {students.length} {students.length === 1 ? 'student' : 'students'} · {assignments.length} active {assignments.length === 1 ? 'assignment' : 'assignments'}
-          </p>
-        </div>
-      </div>
-
-      {error && <AC.Toast tone="danger" title="Something went wrong" message={error} onClose={() => setError(null)} />}
-
+    <Page
+      title="Assignment Scenarios"
+      description={`${scenarios.length} scenarios · ${students.length} ${students.length === 1 ? 'student' : 'students'} · ${assignments.length} active ${assignments.length === 1 ? 'assignment' : 'assignments'}`}
+    >
       {students.length === 0 && (
-        <AC.Card>
-          <AC.EmptyState
-            icon={<Icon name="Users" size={24} />}
-            title="No students to assign yet"
-            description="Add students on the Students page before assigning scenarios."
-          />
-        </AC.Card>
+        <Alert type="info" showIcon title="No students to assign yet" description="Add students on the Students page before assigning scenarios." />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
+      <Row gutter={[16, 16]}>
         {scenarios.map((sc) => {
           const rows = byScenario[sc.id] || [];
+          const sev = SEVERITY[sc.color] || SEVERITY.info;
           return (
-            <AC.Card key={sc.id} accent={sc.color === 'critical'}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 200 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <AC.SeverityBadge level={sc.color} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-tertiary)' }}>{sc.id}</span>
-                    </div>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3 }}>{sc.title}</h3>
-                  </div>
+            <Col key={sc.id} xs={24} md={12} xl={8}>
+              <Card
+                style={{ height: '100%' }}
+                styles={{ body: { display: 'flex', flexDirection: 'column', gap: 12, height: '100%' } }}
+              >
+                <div>
+                  <Flex align="center" gap={8} style={{ marginBottom: 6 }}>
+                    <Tag color={sev.color}>{sev.label}</Tag>
+                    <Typography.Text type="secondary" code>{sc.id}</Typography.Text>
+                  </Flex>
+                  <Typography.Title level={5} style={{ margin: 0 }}>{sc.title}</Typography.Title>
                 </div>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  <AC.Badge tone="neutral" square>{sc.difficulty}</AC.Badge>
-                  <AC.Badge tone="neutral" square icon={<Icon name="Clock" size={11} />}>{sc.mins}m</AC.Badge>
-                  <AC.Badge tone="neutral" square>{sc.tag}</AC.Badge>
-                </div>
+                <Flex wrap gap={4}>
+                  <Tag>{sc.difficulty}</Tag>
+                  <Tag icon={<ClockCircleOutlined />}>{sc.mins}m</Tag>
+                  <Tag>{sc.tag}</Tag>
+                </Flex>
 
-                <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5, flex: 1 }}>{sc.desc}</p>
+                <Typography.Paragraph type="secondary" ellipsis={{ rows: 3, tooltip: sc.desc }} style={{ margin: 0, flex: 1 }}>{sc.desc}</Typography.Paragraph>
 
-                {/* Assigned students */}
-                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: rows.length ? 8 : 0 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-tertiary)' }}>
+                <div>
+                  <Flex align="center" justify="space-between" style={{ marginBottom: rows.length ? 4 : 0 }}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                       {rows.length ? `Assigned · ${rows.length}` : 'Not assigned'}
-                    </span>
-                    <AC.Button variant="secondary" size="sm" leadingIcon={<Icon name="UserPlus" size={13} />} disabled={students.length === 0} onClick={() => setAssignFor(sc)}>
+                    </Typography.Text>
+                    <Button size="small" icon={<UserAddOutlined />} disabled={students.length === 0} onClick={() => setAssignFor(sc)}>
                       Assign
-                    </AC.Button>
-                  </div>
+                    </Button>
+                  </Flex>
                   {rows.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {rows.map((a) => (
-                        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <AC.Avatar name={a.student.name} size="sm" />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.student.name}</div>
-                          </div>
-                          <AC.Badge tone={STATUS_META[a.status].tone} dot square>{STATUS_META[a.status].label}</AC.Badge>
-                          <AC.IconButton label="Unassign" onClick={() => onRemove(a)} disabled={busyId === a.id}>
-                            <Icon name="X" size={14} />
-                          </AC.IconButton>
-                        </div>
-                      ))}
-                    </div>
+                    <List
+                      size="small"
+                      split={false}
+                      dataSource={rows}
+                      renderItem={(a) => (
+                        <List.Item
+                          style={{ paddingInline: 0 }}
+                          actions={[
+                            <Popconfirm key="rm" title={`Unassign ${a.student.name}?`} okText="Unassign" onConfirm={() => onRemove(a)}>
+                              <Tooltip title="Unassign">
+                                <Button type="text" size="small" aria-label="Unassign" disabled={busyId === a.id} icon={<CloseOutlined />} />
+                              </Tooltip>
+                            </Popconfirm>,
+                          ]}
+                        >
+                          <List.Item.Meta
+                            avatar={<Avatar size="small">{initials(a.student.name)}</Avatar>}
+                            title={<Typography.Text ellipsis style={{ fontWeight: 400 }}>{a.student.name}</Typography.Text>}
+                          />
+                          <Tag color={STATUS_META[a.status]?.color}>{STATUS_META[a.status]?.label || a.status}</Tag>
+                        </List.Item>
+                      )}
+                    />
                   )}
                 </div>
-              </div>
-            </AC.Card>
+              </Card>
+            </Col>
           );
         })}
-      </div>
+      </Row>
 
       <AssignDialog
         key={assignFor ? assignFor.id : 'none'}
@@ -119,76 +120,87 @@ export function AssignmentsManager({ scenarios, students, assignments }) {
         students={students}
         assignedIds={assignFor ? new Set((byScenario[assignFor.id] || []).map((a) => a.student.id)) : new Set()}
         onClose={() => setAssignFor(null)}
-        onError={setError}
+        onError={(e) => message.error(e)}
       />
-    </div>
+    </Page>
   );
 }
 
 function AssignDialog({ scenario, students, assignedIds, onClose, onError }) {
-  const [selected, setSelected] = useState(() => new Set());
-  const [due, setDue] = useState('');
+  const [selected, setSelected] = useState([]);
+  const [due, setDue] = useState(null); // dayjs | null
   const [pending, startTransition] = useTransition();
   if (!scenario) return null;
-
-  const toggle = (id) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
 
   const assignable = students.filter((s) => !assignedIds.has(s.id));
 
   const submit = () => {
-    if (selected.size === 0) { onError('Select at least one student.'); return; }
+    if (selected.length === 0) { onError('Select at least one student.'); return; }
     startTransition(async () => {
-      const res = await assignScenario(scenario.id, [...selected], due || null);
+      const res = await assignScenario(scenario.id, [...selected], due ? due.format('YYYY-MM-DD') : null);
       if (res?.error) { onError(res.error); return; }
       onClose();
     });
   };
 
+  const toggle = (id) => setSelected((p) => (p.includes(id) ? p.filter((k) => k !== id) : [...p, id]));
+
   return (
-    <AC.Dialog
+    <Modal
       open
-      title={`Assign · ${scenario.title}`}
-      description="Select the students who should receive this scenario."
-      icon={<Icon name="ClipboardList" size={18} />}
-      onClose={onClose}
-      footer={
-        <>
-          <AC.Button variant="ghost" onClick={onClose}>Cancel</AC.Button>
-          <AC.Button variant="primary" loading={pending} leadingIcon={<Icon name="Check" size={14} />} onClick={submit}>
-            Assign{selected.size ? ` (${selected.size})` : ''}
-          </AC.Button>
-        </>
-      }
+      width={640}
+      title={<Flex align="center" gap={8}><ProfileOutlined />{`Assign · ${scenario.title}`}</Flex>}
+      onCancel={onClose}
+      onOk={submit}
+      okText={`Assign${selected.length ? ` (${selected.length})` : ''}`}
+      okButtonProps={{ disabled: assignable.length === 0 }}
+      confirmLoading={pending}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ maxHeight: 260, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 2, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: 8 }}>
-          {students.map((s) => {
-            const already = assignedIds.has(s.id);
-            return (
-              <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px', borderRadius: 6, cursor: already ? 'default' : 'pointer', opacity: already ? 0.55 : 1 }}>
-                <AC.Checkbox checked={already || selected.has(s.id)} disabled={already} onChange={() => toggle(s.id)} />
-                <AC.Avatar name={s.name} size="sm" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{s.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{s.email}</div>
-                </div>
-                {already && <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Already assigned</span>}
-              </label>
-            );
+      <Typography.Paragraph type="secondary">Select the students who should receive this scenario.</Typography.Paragraph>
+      <Flex vertical gap={16}>
+        <Table
+          size="small"
+          rowKey="id"
+          dataSource={students}
+          pagination={false}
+          scroll={{ y: 280 }}
+          rowSelection={{
+            selectedRowKeys: [...selected, ...assignedIds],
+            onChange: (keys) => setSelected(keys.filter((k) => !assignedIds.has(k))),
+            getCheckboxProps: (row) => ({ disabled: assignedIds.has(row.id) }),
+          }}
+          onRow={(row) => ({
+            onClick: () => { if (!assignedIds.has(row.id)) toggle(row.id); },
+            style: { cursor: assignedIds.has(row.id) ? 'default' : 'pointer' },
           })}
-        </div>
-        {assignable.length === 0 && (
-          <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)' }}>Every student already has this scenario.</div>
-        )}
-        <AC.Input label="Due date (optional)" type="date" value={due} onChange={(e) => setDue(e.target.value)} leadingIcon={<Icon name="CalendarClock" size={16} />} />
-      </div>
-    </AC.Dialog>
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No students." /> }}
+          columns={[
+            {
+              title: 'Student', dataIndex: 'name', key: 'name',
+              render: (v, row) => (
+                <Flex align="center" gap={8}>
+                  <Avatar size="small">{initials(v)}</Avatar>
+                  <div style={{ minWidth: 0 }}>
+                    <div>{v}</div>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>{row.email}</Typography.Text>
+                  </div>
+                </Flex>
+              ),
+            },
+            {
+              title: '', key: 'state', width: 140, align: 'right',
+              render: (_v, row) => (assignedIds.has(row.id) ? <Tag>Already assigned</Tag> : null),
+            },
+          ]}
+        />
+        {assignable.length === 0 && <Alert type="info" showIcon title="Every student already has this scenario." />}
+        <FormLayout>
+          <Form.Item label="Due date (optional)" style={{ marginBottom: 0 }}>
+            <DatePicker value={due} onChange={setDue} style={{ width: 220 }} />
+          </Form.Item>
+        </FormLayout>
+      </Flex>
+    </Modal>
   );
 }
 
