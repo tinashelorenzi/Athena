@@ -17,7 +17,7 @@ rendered — students download it exactly as uploaded and work it offline.
 
 ## Storage
 
-Artifacts are stored in object storage (S3-compatible: AWS S3 or MinIO), configured
+Artifacts are stored in object storage (S3-compatible: AWS S3, or the RustFS container from `docker-compose.yml`), configured
 under **Settings → Storage**. On upload, the ZIP is placed in the configured bucket
 and the endpoint record retains a reference (object key) to it. On download, the
 platform serves the object back to the student verbatim.

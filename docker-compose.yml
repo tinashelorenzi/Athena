@@ -1,14 +1,20 @@
 # Athena infrastructure.
 #
-# Data services (Postgres + MinIO) come up by default; the app + workers are
-# opt-in behind the `app` profile.
+# Data services (Postgres + S3-compatible object storage) come up by default;
+# the app + workers are opt-in behind the `app` profile.
 #
-#   docker compose up -d                     # postgres + minio + create bucket
-#   ./minio-credentials.sh                   # mint storage creds for Settings
+#   docker compose up -d                     # postgres + storage + create bucket
+#   ./minio-credentials.sh                   # print storage settings for Athena
+#                                              → Settings → Storage
 #   docker compose --profile app up -d       # ...also build & run the app + workers
 #   docker compose down                      # stop (add -v to wipe data volumes)
 #
 # All values come from .env (Compose auto-loads it for ${VAR} substitution).
+#
+# Object storage is RustFS (Apache-2.0, S3-compatible). It replaced MinIO in
+# 2026-10 when MinIO stopped publishing its container images; the MINIO_* .env
+# names are kept so existing .env files work. Moving existing MinIO data across:
+# docs/deploy.md.
 
 services:
   db:
@@ -29,43 +35,51 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    container_name: athena-minio
+  storage:
+    image: rustfs/rustfs:1.0.3
+    container_name: athena-storage
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
       - "${MINIO_PORT:-9000}:9000"           # S3 API
       - "${MINIO_CONSOLE_PORT:-9001}:9001"   # web console
     volumes:
-      - athena-minio:/data
+      - athena-rustfs:/data
+    networks:
+      default:
+        # Storage settings saved as http://minio:9000 (the MinIO-era service
+        # name) keep working.
+        aliases: [minio]
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  # One-shot: create the bucket and keep it private (served via the app, not
-  # anonymously). Retries until MinIO is reachable, then exits.
-  minio-init:
-    image: minio/mc:latest
+  # One-shot: create the bucket. New buckets have no public policy, so objects
+  # are served only through the app. Safe to re-run; exits when done.
+  storage-init:
+    image: amazon/aws-cli:2.38.5
     depends_on:
-      - minio
+      storage:
+        condition: service_healthy
     environment:
-      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
       MINIO_BUCKET: ${MINIO_BUCKET}
     entrypoint:
       - /bin/sh
       - -c
       - >
-        until mc mb --ignore-existing local/$$MINIO_BUCKET; do
-          echo 'waiting for minio...'; sleep 2;
+        until aws --endpoint-url http://storage:9000 s3api head-bucket --bucket "$$MINIO_BUCKET" 2>/dev/null ||
+              aws --endpoint-url http://storage:9000 s3api create-bucket --bucket "$$MINIO_BUCKET" >/dev/null; do
+          echo 'waiting for storage...'; sleep 2;
         done &&
-        mc anonymous set none local/$$MINIO_BUCKET &&
-        echo "MinIO bucket ready (private): $$MINIO_BUCKET"
+        echo "Storage bucket ready (private): $$MINIO_BUCKET"
     restart: "no"
 
   app:
@@ -76,8 +90,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio:
-        condition: service_started
+      storage:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
@@ -110,4 +124,6 @@ services:
 
 volumes:
   athena-pgdata:
-  athena-minio:
+  # RustFS data. The old MinIO volume (athena-minio) is deliberately not listed,
+  # so `docker compose down -v` can't delete it before its data is moved.
+  athena-rustfs:
