@@ -23,6 +23,9 @@ export function parseJson(text: string): Validated<unknown> {
 
 const isStr = (v: unknown) => typeof v === "string" && v.length > 0;
 
+/** MITRE ATT&CK technique / sub-technique ID, e.g. "T1059", "T1059.001", "T0855". */
+const TECHNIQUE_ID = /^T\d{4}(?:\.\d{3})?$/;
+
 // ── Logs ────────────────────────────────────────────────────────────────────
 export function validateLogs(raw: unknown): Validated<{ version: number; entries: unknown[] }> {
   if (!isObject(raw)) return { ok: false, error: "Logs must be an object with an `entries` array." };
@@ -51,6 +54,12 @@ export function validateAlerts(raw: unknown): Validated<{ version: number; alert
     if (!isStr(a.host)) return { ok: false, error: `alerts[${i}].host is required.` };
     if (!Number.isInteger(a.seek) || (a.seek as number) < 0) {
       return { ok: false, error: `alerts[${i}].seek must be an integer >= 0 (seconds from start).` };
+    }
+    if (a.techniques !== undefined) {
+      const bad = !Array.isArray(a.techniques) ? a.techniques : a.techniques.find((t) => !TECHNIQUE_ID.test(String(t)));
+      if (bad !== undefined) {
+        return { ok: false, error: `alerts[${i}].techniques must be an array of ATT&CK IDs like "T1059.001" (got ${JSON.stringify(bad)}).` };
+      }
     }
   }
   return { ok: true, data: { version: Number(raw.version) || 1, alerts } };
@@ -122,4 +131,21 @@ export function normalizeFlags(items: { question: string; answer: string; points
       answer: f.answer.trim(),
       points: Number(f.points) || 0,
     }));
+}
+
+// ── MITRE ATT&CK technique tags ─────────────────────────────────────────────
+/** Uppercase, validate and de-duplicate technique IDs ("t1059.001" → "T1059.001"). Invalid IDs are dropped. */
+export function normalizeTechniques(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const out = new Set<string>();
+  for (const v of items) {
+    const id = typeof v === "string" ? v.trim().toUpperCase() : "";
+    if (TECHNIQUE_ID.test(id)) out.add(id);
+  }
+  return [...out];
+}
+
+/** ATT&CK for ICS techniques are T0xxx; everything else is Enterprise. */
+export function attackDomainOf(id: string): "ics" | "enterprise" {
+  return id.startsWith("T0") ? "ics" : "enterprise";
 }

@@ -5,6 +5,7 @@ import { getStudentScenario, ensureProgress, publicFlags } from '@/lib/student';
 import { publicPrompts } from '@/lib/guide';
 import { prisma } from '@/lib/db';
 import { tickAndReadRun } from '@/lib/run-engine';
+import { LabWorkspacePage } from '@/components/screens/labs/LabWorkspacePage';
 
 /* Student scenario workspace — the SIEM-like environment for one scenario.
    Authorization (cohort must be bound to the scenario) happens in
@@ -14,8 +15,10 @@ export default async function ScenarioWorkspacePage({ params }) {
   const { scenarioId } = await params;
 
   // Distinguish a missing scenario (404) from one the student can't access (403).
-  const exists = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { id: true } });
+  const exists = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { kind: true } });
   if (!exists) notFound();
+  // Labs are done on the student's own machines: a different workspace.
+  if (exists.kind === 'LAB') return <LabWorkspacePage user={user} scenarioId={scenarioId} />;
   const data = await getStudentScenario(user.id, scenarioId);
   if (!data) forbidden();
 
@@ -30,6 +33,7 @@ export default async function ScenarioWorkspacePage({ params }) {
     description: scenario.description,
     brief: scenario.brief,
     objectives: scenario.objectives || [],
+    techniques: scenario.techniques,
     flags: publicFlags(scenario.flags),
     reportRequired: scenario.reportRequired,
     reportPrompt: scenario.reportPrompt || '',

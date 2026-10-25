@@ -1,0 +1,95 @@
+# Practical 21 — Harden the Vukani tracking portal (example lab, docs/labs/spec.md §9).
+# One Ubuntu machine in the `web` role runs nginx and Snort 2.
+zcl: 1
+
+session:
+  timeLimitMinutes: 180
+  checks:
+    practice: true
+    maxPractice: 30
+    cooldownSeconds: 30
+    showResults: dojo
+
+machines:
+  web:
+    os: ubuntu
+    versions: ["22.04", "24.04"]
+    packages: [nginx, snort, curl]
+
+params:
+  # Must appear in the student's work: proves whose config it is.
+  token:    { type: token, length: 6, unique: cohort }
+  # Each student writes Snort rules in their own 10 000-wide SID block.
+  sid_base: { type: int, min: 1000000, max: 1990000, step: 10000, unique: cohort }
+
+lifecycle:
+  baseline:
+    web:
+      hash: [/etc/nginx/**, /etc/snort/**]
+      logs: [/var/log/nginx/access.log]
+
+collect:
+  - on: web
+    gather:
+      nginx_test:  { run: [nginx, -t] }
+      nginx_dump:  { run: [nginx, -T] }
+      nginx_svc:   { service: nginx.service }
+      # Behaviour, not just config: the headers nginx actually sends.
+      home:        { run: [curl, -sS, -o, /dev/null, -D, "-", "http://127.0.0.1/"] }
+      local_rules: { file: /etc/snort/rules/local.rules }
+  - on: web
+    gather:
+      snort_test:  { run: [snort, -T, -q, -c, /etc/snort/snort.conf], timeout: 60 }
+      # Replay a captured SQL-injection request through the student's own Snort config.
+      replay:      { run: [snort, -q, -A, console, -k, none, -c, /etc/snort/snort.conf, -r, "{{asset.sqli_pcap}}"], timeout: 60 }
+
+parse:
+  nginx:   { from: nginx_dump.stdout, with: nginx }
+  headers: { from: home.stdout, with: regex, pattern: '^(?<name>[A-Za-z0-9-]+):[ \t]*(?<value>[^\r\n]*)' }
+  rules:   { from: local_rules.content, with: snort_rules }
+  alerts:  { from: replay.stdout, with: regex, pattern: '\[\*\*\] \[(?<gid>\d+):(?<sid>\d+):(?<rev>\d+)\] (?<msg>.*?) \[\*\*\]' }
+
+checks:
+  - id: nginx_ok
+    title: nginx config is valid and running
+    points: 10
+    assert:
+      - nginx_test.exit_code == 0
+      - nginx_svc.active_state == "active"
+    hint: nginx must pass its own config test (nginx -t) and be running.
+
+  - id: server_tokens
+    title: The Server header hides the nginx version
+    points: 10
+    assert:
+      - nginx.http.values.server_tokens == "off"
+      - '!headers.exists(h, h.name.lowerAscii() == "server" && h.value.matches("[0-9]"))'
+    hint: Look at what the Server response header gives away.
+
+  - id: security_headers
+    title: Security headers are sent
+    assert:
+      - { expr: 'headers.exists(h, h.name.lowerAscii() == "x-frame-options" && h.value in ["DENY", "SAMEORIGIN"])', points: 5, label: X-Frame-Options }
+      - { expr: 'headers.exists(h, h.name.lowerAscii() == "x-content-type-options" && h.value == "nosniff")', points: 5, label: X-Content-Type-Options }
+      - { expr: 'headers.exists(h, h.name.lowerAscii() == "x-vukani-node" && h.value == param.token)', points: 10, label: Your node tag (X-Vukani-Node) }
+    hint: Check every header in the brief, including your own node tag.
+
+  - id: snort_config
+    title: Snort loads your configuration
+    points: 20
+    assert: snort_test.exit_code == 0
+    hint: Run snort -T with the main config and read the first error it prints.
+
+  - id: sqli_rule
+    title: Snort detects the SQL injection
+    assert:
+      - { expr: 'rules.exists(r, r.action == "alert" && r.msg != null && r.msg.contains(param.token))', points: 10, label: A rule carries your token in its msg }
+      - { expr: 'rules.exists(r, r.sid != null && r.sid >= param.sid_base && r.sid < param.sid_base + 10000)', points: 10, label: The rule uses your SID range }
+      - { expr: 'alerts.exists(a, int(a.sid) >= param.sid_base && int(a.sid) < param.sid_base + 10000)', points: 20, label: Your rule fires on the attack capture }
+    hint: Write the rule in local.rules, then think about which part of the request gives the attack away.
+
+  - id: rules_written_in_session
+    title: Rules were written during the session
+    flag: CHANGED_BEFORE_START
+    visibility: instructor
+    assert: local_rules.changed

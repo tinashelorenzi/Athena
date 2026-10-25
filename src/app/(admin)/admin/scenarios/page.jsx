@@ -9,13 +9,14 @@ export default async function ScenariosPage() {
   const scenarios = await prisma.scenario.findMany({
     orderBy: { updatedAt: 'desc' },
     select: {
-      id: true, type: true, title: true, exposure: true, hidden: true, updatedAt: true,
+      id: true, kind: true, type: true, title: true, exposure: true, hidden: true, updatedAt: true,
       _count: { select: { endpoints: true } },
     },
   });
 
   const rows = scenarios.map((s) => ({
     id: s.id,
+    kind: s.kind,
     type: s.type,
     title: s.title,
     exposure: s.exposure,

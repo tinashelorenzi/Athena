@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons';
 import { Field, Textarea } from './primitives';
 import { JsonField } from './JsonField';
+import { TechniqueSelect } from '@/components/attack/TechniqueSelect';
 import { FormLayout, SectionHeader, ToggleRow } from '../settings/parts';
 
 // Re-exported so existing importers (e.g. ScenarioEditor) keep working.
@@ -23,6 +24,7 @@ export function ScenarioFields({ mode = 'create', initial = {} }) {
   const [hidden, setHidden] = useState(Boolean(initial.hidden));
   const [realtime, setRealtime] = useState(Boolean(initial.realtime));
   const [reportRequired, setReportRequired] = useState(Boolean(initial.reportRequired));
+  const [techniques, setTechniques] = useState(initial.techniques || []);
   const [objectives, setObjectives] = useState(
     (initial.objectives || []).map((o) => ({ text: o.text })),
   );
@@ -65,6 +67,10 @@ export function ScenarioFields({ mode = 'create', initial = {} }) {
           <Field label="Description">
             <Textarea name="description" rows={2} defaultValue={initial.description || ''} placeholder="One or two sentences summarizing the scenario." />
           </Field>
+          <Field label="ATT&CK techniques" hint="MITRE ATT&CK techniques this scenario exercises. Shown to students and linked from the ATT&CK Explorer.">
+            <TechniqueSelect value={techniques} onChange={setTechniques} />
+          </Field>
+          <input type="hidden" name="techniquesJson" value={JSON.stringify(techniques)} />
           {type === 'DOJO' && (
             <ToggleRow label="Hidden" hint="Reachable only by direct link — not listed for students.">
               <Switch checked={hidden} onChange={setHidden} />

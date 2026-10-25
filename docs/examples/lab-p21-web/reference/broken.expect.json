@@ -1,0 +1,15 @@
+{
+  "description": "Stock Ubuntu nginx + Snort, nothing done: config checks pass, hardening and detection fail.",
+  "pass": [
+    "nginx_ok",
+    "snort_config"
+  ],
+  "fail": [
+    "server_tokens",
+    "security_headers",
+    "sqli_rule"
+  ],
+  "flags": [
+    "CHANGED_BEFORE_START"
+  ]
+}

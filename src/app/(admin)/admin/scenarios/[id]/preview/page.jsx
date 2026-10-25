@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { ScenarioWorkspace } from '@/components/screens/student/ScenarioWorkspace';
 import { requireArchitect } from '@/lib/auth';
 import { publicFlags } from '@/lib/student';
@@ -15,6 +15,8 @@ export default async function ScenarioPreviewPage({ params }) {
     include: { endpoints: { orderBy: { hostname: 'asc' } } },
   });
   if (!scenario) notFound();
+  // Labs are graded on real machines; there is nothing to play in the browser.
+  if (scenario.kind === 'LAB') redirect(`/admin/scenarios/${id}`);
 
   const view = {
     id: scenario.id,
@@ -24,6 +26,7 @@ export default async function ScenarioPreviewPage({ params }) {
     description: scenario.description,
     brief: scenario.brief,
     objectives: scenario.objectives || [],
+    techniques: scenario.techniques,
     // Preview includes the answers so Dojo flags can be checked locally.
     flags: publicFlags(scenario.flags).map((f) => {
       const raw = (Array.isArray(scenario.flags) ? scenario.flags : []).find((x, i) => String(x?.id ?? `f${i + 1}`) === f.id);

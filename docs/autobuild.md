@@ -9,6 +9,10 @@ land in the new scenario's editor.
 A complete, working example lives in
 [`docs/examples/scenario-autobuild/`](./examples/scenario-autobuild/).
 
+> **Labs** (graded on the student's own machines) use the same Auto-builder
+> with `"kind": "LAB"` in `scenario.json` and a different folder layout — see
+> [labs/authoring.md](./labs/authoring.md).
+
 ## Folder layout
 
 ```
@@ -43,6 +47,7 @@ is optional.
   "description": "A finance workstation shows ransomware staging.",
   "exposure": "ROLLOUT",
   "hidden": false,
+  "techniques": ["T1059.001", "T1486"],
   "brief": "brief.md",
   "objectives": [
     "Identify the initial access vector",
@@ -74,6 +79,7 @@ is optional.
 | `exposure`    | `ROLLOUT`/`PUBLIC`  | Defaults to `ROLLOUT` (hidden from students until bound).    |
 | `hidden`      | boolean             | Dojo-only; reachable by reference link but unlisted.        |
 | `realtime`    | boolean             | Real-time simulation — feed runs continuously, students can't pause. |
+| `techniques`  | string[]            | MITRE ATT&CK IDs (e.g. `T1059.001`, ICS `T0855`). Merged with any per-alert `techniques` from the alerts bundle; invalid IDs are dropped. |
 | `brief`       | string              | Path to a `.md` file, **or** inline markdown text.          |
 | `objectives`  | string[]            | Guidance shown to students.                                 |
 | `flags`       | object[]            | `{ question, answer, points }` — graded deliverable flags.  |

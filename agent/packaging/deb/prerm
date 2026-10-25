@@ -1,0 +1,16 @@
+#!/bin/sh
+# zaio prerm: on removal, restore anything a lab session turned off (SSH) and
+# stop the agent. Upgrades keep running sessions as they are.
+set -e
+
+case "$1" in
+  remove|deconfigure)
+    if [ -x /usr/bin/zaio ]; then
+      /usr/bin/zaio undo --all || echo "zaio: could not restore SSH automatically — run: sudo systemctl unmask ssh.socket ssh.service" >&2
+    fi
+    if [ -d /run/systemd/system ]; then
+      systemctl disable --now zaio.service >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+exit 0

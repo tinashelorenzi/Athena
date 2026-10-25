@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zaio/me-response",
+  "title": "GET /api/agent/me — 200 response (signed request)",
+  "type": "object",
+  "required": ["machine", "owner", "serverTime"],
+  "properties": {
+    "machine": {
+      "type": "object",
+      "required": ["id", "label", "hostname", "status", "enrolledAt", "keyFingerprint"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "hostname": { "type": "string" },
+        "status": { "enum": ["ACTIVE", "REVOKED"] },
+        "enrolledAt": { "type": "string", "format": "date-time" },
+        "keyFingerprint": { "type": "string" }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "required": ["name", "email"],
+      "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "cohort": { "type": ["string", "null"] } }
+    },
+    "labs": { "type": "array", "items": { "type": "object" }, "description": "Labs open to the owner (empty until M3)." },
+    "serverTime": { "type": "string", "format": "date-time" }
+  }
+}

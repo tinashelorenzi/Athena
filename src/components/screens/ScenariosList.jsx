@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Card, Empty, Flex, Input, Table, Tooltip, Typography } from 'antd';
+import { Badge, Button, Card, Empty, Flex, Input, Table, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined, CodeSandboxOutlined, SearchOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import { Page, TypeTag, TYPE_META } from './settings/parts';
 
@@ -23,6 +23,7 @@ export function ScenariosList({ scenarios }) {
       render: (v, row) => (
         <Flex align="center" gap={8}>
           <Typography.Text strong>{v}</Typography.Text>
+          {row.kind === 'LAB' && <Tooltip title="Lab — graded on the student's own machines"><Tag color="purple" style={{ margin: 0 }}>Lab</Tag></Tooltip>}
           {row.hidden && <Tooltip title="Hidden — direct link only"><EyeInvisibleOutlined style={{ opacity: 0.55 }} /></Tooltip>}
         </Flex>
       ),
@@ -39,7 +40,7 @@ export function ScenariosList({ scenarios }) {
       onFilter: (value, row) => row.exposure === value,
       render: (v) => <Badge status={v === 'PUBLIC' ? 'success' : 'default'} text={v === 'PUBLIC' ? 'Public' : 'Rollout'} />,
     },
-    { title: 'Endpoints', dataIndex: 'endpoints', key: 'endpoints', width: 110, align: 'right', sorter: (a, b) => a.endpoints - b.endpoints },
+    { title: 'Endpoints', dataIndex: 'endpoints', key: 'endpoints', width: 110, align: 'right', sorter: (a, b) => a.endpoints - b.endpoints, render: (v, row) => (row.kind === 'LAB' ? '—' : v) },
     {
       title: 'Updated', dataIndex: 'updated', key: 'updated', width: 130, align: 'right',
       sorter: (a, b) => a.updated.localeCompare(b.updated), defaultSortOrder: 'descend',

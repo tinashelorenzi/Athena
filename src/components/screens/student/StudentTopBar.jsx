@@ -3,12 +3,12 @@ import React, { useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Layout, Menu, Avatar, Dropdown, Button, Flex, Typography, theme } from 'antd';
-import { HomeOutlined, AimOutlined, CompassOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons';
+import { HomeOutlined, AimOutlined, CloudServerOutlined, CompassOutlined, LogoutOutlined, DownOutlined } from '@ant-design/icons';
 import { logout } from '@/app/actions/auth';
 import { startTour } from '@/components/Tour';
 import { initials } from '@/components/shell/SideShell';
 
-/* Student top bar: brand + primary nav (Dashboard / ATT&CK Explorer) + user
+/* Student top bar: brand + primary nav (Dashboard / ATT&CK Explorer / Machines) + user
    menu. `left` replaces the brand+nav with custom content (e.g. the scenario
    workspace's back button + title). */
 export function StudentTopBar({ user, left }) {
@@ -17,7 +17,7 @@ export function StudentTopBar({ user, left }) {
   const [, startTransition] = useTransition();
   const { token } = theme.useToken();
   const name = user?.name || 'Student';
-  const selected = pathname.startsWith('/attack') ? '/attack' : '/learn';
+  const selected = ['/attack', '/machines'].find((p) => pathname.startsWith(p)) || '/learn';
 
   const menu = {
     items: [
@@ -52,6 +52,7 @@ export function StudentTopBar({ user, left }) {
             items={[
               { key: '/learn', icon: <HomeOutlined />, label: 'Dashboard' },
               { key: '/attack', icon: <AimOutlined />, label: 'ATT&CK Explorer' },
+              { key: '/machines', icon: <CloudServerOutlined />, label: 'Machines' },
             ]}
             style={{ flex: 1, minWidth: 0, borderBottom: 0, marginLeft: 12 }}
           />

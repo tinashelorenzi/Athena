@@ -14,10 +14,16 @@ import {
   validateOsquery,
   normalizeObjectives,
   normalizeFlags,
+  normalizeTechniques,
 } from "@/lib/scenario-schemas";
 import { parseGuide, guideRelPath } from "@/lib/guide";
+import { checkLabFolder, type FolderFile, type LabFolderReport } from "@/lib/labs/folder";
+import { largestCohortSize, saveLab } from "@/lib/labs/save";
 
-export type AutoBuildResult = { error?: string; ok?: string; scenarioId?: string };
+/** A lab folder's check report, minus the compiled definition (kept server-side). */
+export type LabBuildReport = Omit<LabFolderReport, "lab" | "source" | "references"> & { maxScore?: number; checkCount?: number; version?: number };
+
+export type AutoBuildResult = { error?: string; ok?: string; scenarioId?: string; lab?: LabBuildReport };
 
 function dirOf(p: string): string {
   const i = p.lastIndexOf("/");
@@ -71,6 +77,8 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
     return { error: `scenario.json is not valid JSON: ${e instanceof Error ? e.message : "parse error"}` };
   }
 
+  if (m.kind === "LAB") return buildLab(entries, architect.id);
+
   const type = m.type === "ASSESSMENT" ? "ASSESSMENT" : "DOJO";
   const title = String(m.title ?? "").trim();
   if (!title) return { error: "scenario.json: `title` is required." };
@@ -116,6 +124,13 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
   if (logsRes.error) return { error: logsRes.error };
   const alertsRes = await readBundle(m.alerts, "alerts", validateAlerts);
   if (alertsRes.error) return { error: alertsRes.error };
+
+  // ATT&CK tags: the manifest's list plus any tagged on individual alerts.
+  const alertList = ((alertsRes.data as { alerts?: { techniques?: unknown[] }[] })?.alerts ?? []);
+  const techniques = normalizeTechniques([
+    ...(Array.isArray(m.techniques) ? m.techniques : []),
+    ...alertList.flatMap((a) => a.techniques ?? []),
+  ]);
 
   // ── guide ─────────────────────────────────────────────────────────────────
   let guide: string | null = null;
@@ -186,6 +201,7 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
       guide,
       guidePrompts: guidePrompts as object | undefined,
       guideAssets: guideAssets.length ? guideAssets.map((a) => a.rel) : undefined,
+      techniques,
       refToken: newRefToken(),
       createdById: architect.id,
     },
@@ -230,4 +246,34 @@ export async function autoBuildScenario(formData: FormData): Promise<AutoBuildRe
     alertsRes.data ? "alerts" : null,
   ].filter(Boolean);
   return { ok: `Built “${title}” — ${parts.join(", ")}.`, scenarioId: scenario.id };
+}
+
+/**
+ * A `"kind": "LAB"` folder (docs/labs/spec.md section 10): compile lab.yaml,
+ * run the reference-evidence gate, then save a new lab or a new version of it.
+ */
+async function buildLab(entries: { rel: string; file: File }[], architectId: string): Promise<AutoBuildResult> {
+  const files: FolderFile[] = entries.map(({ rel, file }) => ({
+    rel,
+    size: file.size,
+    text: () => file.text(),
+    bytes: async () => new Uint8Array(await file.arrayBuffer()),
+  }));
+  const report = await checkLabFolder(files, { maxCohortSize: (await largestCohortSize()) || undefined });
+  const { lab, source: _source, references: _references, ...rest } = report;
+  void _source;
+  void _references;
+  const summary: LabBuildReport = { ...rest, maxScore: lab?.maxScore, checkCount: lab?.checks.length };
+  if (!report.ok) {
+    return { error: `The lab was not accepted: ${report.errors.length} problem${report.errors.length === 1 ? "" : "s"} to fix.`, lab: summary };
+  }
+  const saved = await saveLab(report, files, architectId);
+  if (!saved.ok) return { error: saved.error, lab: summary };
+  revalidatePath("/admin/scenarios");
+  const good = report.gate.good;
+  return {
+    ok: `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}.`,
+    scenarioId: saved.scenarioId,
+    lab: { ...summary, version: saved.version },
+  };
 }

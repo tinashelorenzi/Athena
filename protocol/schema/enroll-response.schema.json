@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zaio/enroll-response",
+  "title": "POST /api/agent/enroll — 201 response",
+  "type": "object",
+  "required": ["machineId", "hostname", "label", "keyFingerprint", "owner"],
+  "properties": {
+    "machineId": { "type": "string", "description": "Athena's ID for this machine (sent as X-Zaio-Machine)." },
+    "hostname": { "type": "string", "description": "Hostname the agent should set, zaio-<handle>-<NN>." },
+    "label": { "type": "string" },
+    "keyFingerprint": { "type": "string" },
+    "owner": {
+      "type": "object",
+      "required": ["name", "email"],
+      "properties": { "name": { "type": "string" }, "email": { "type": "string" } }
+    },
+    "athenaKeyId": { "type": ["string", "null"], "description": "Key ID Athena signs bundles with (null until bundle signing is configured)." }
+  }
+}

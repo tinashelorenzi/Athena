@@ -1,0 +1,26 @@
+#!/bin/sh
+# zaio postinst: tidy up a pre-package install, then (re)start the agent if
+# this machine is already linked to Athena.
+set -e
+
+if [ "$1" = "configure" ]; then
+  # The curl installer before 0.3 put the binary in /usr/local/bin and wrote
+  # its own unit to /etc, which would shadow the packaged one. Remove both.
+  if [ -f /etc/systemd/system/zaio.service ] && grep -q "/usr/local/bin/zaio daemon" /etc/systemd/system/zaio.service; then
+    rm -f /etc/systemd/system/zaio.service
+  fi
+  if [ -x /usr/local/bin/zaio ] && /usr/local/bin/zaio version >/dev/null 2>&1; then
+    rm -f /usr/local/bin/zaio
+  fi
+  mkdir -p /var/lib/zaio
+  chmod 0700 /var/lib/zaio
+
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if [ -f /etc/zaio/agent.json ]; then
+      systemctl enable zaio.service >/dev/null 2>&1 || true
+      systemctl restart zaio.service || true
+    fi
+  fi
+fi
+exit 0

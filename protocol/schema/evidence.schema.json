@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zaio/evidence",
+  "title": "Evidence for one check run (agent → Athena), also the format of lab/reference/*.evidence.json",
+  "description": "Grading input (src/lib/labs/language/evidence.ts). Items missing from a role grade as `not collected`.",
+  "type": "object",
+  "required": ["format", "roles"],
+  "properties": {
+    "format": { "const": 1 },
+    "params": {
+      "type": "object",
+      "description": "Reference evidence only: the parameter values the reference machine was built with.",
+      "additionalProperties": { "type": ["string", "number"] }
+    },
+    "roles": {
+      "type": "object",
+      "description": "Lab role → what that machine reported.",
+      "additionalProperties": { "$ref": "#/$defs/role" }
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "object",
+      "required": ["items"],
+      "properties": {
+        "machine": {
+          "type": "object",
+          "properties": { "hostname": { "type": "string" }, "osVersion": { "type": "string" } }
+        },
+        "items": { "type": "object", "additionalProperties": { "$ref": "#/$defs/item" } },
+        "baseline": {
+          "type": "object",
+          "properties": {
+            "files": { "type": "object", "description": "path → sha256 at session start", "additionalProperties": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "item": {
+      "description": "One gathered item: { ok: true, …fields of its primitive } or { ok: false, error, message }.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["ok", "error"],
+          "properties": {
+            "ok": { "const": false },
+            "error": { "enum": ["not_found", "denied", "timeout", "too_large", "unsupported", "missing"] },
+            "message": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["ok"],
+          "properties": { "ok": { "const": true } },
+          "description": "file: exists, path, size, mode, owner, group, mtime, sha256, content | content_b64, truncated. glob: files[] of file results. run: exit_code, stdout, stderr, duration_ms, timed_out, truncated. service: load_state, active_state, sub_state, unit_file_state. package: installed {name: version}. log: content (appended since the baseline), rotated, truncated."
+        }
+      ]
+    }
+  }
+}

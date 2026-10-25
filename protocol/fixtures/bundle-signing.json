@@ -1,0 +1,8 @@
+{
+  "description": "Bundle-signing vector (docs/labs/spec.md 7.3). Athena signs the exact UTF-8 bytes; agents verify `bundle` (base64 of those bytes) with the pinned key before parsing. TEST KEY ONLY.",
+  "keyId": "athena-test-1",
+  "seed": "uzTH4mn/XkTFI5r+Zk+p2V7jkxXVRjU8vXYaTFgsUNU=",
+  "publicKey": "R14NZuup0+282MtwVtsQEnM5pkxu1OEMlTb39FNU/gw=",
+  "bundle": "eyJmb3JtYXQiOjEsInRhc2tJZCI6InRfdGVzdCIsImtpbmQiOiJDT0xMRUNUIiwibWFjaGluZUlkIjoibV90ZXN0Iiwic2Vzc2lvbklkIjoic190ZXN0IiwiaXNzdWVkQXQiOiIyMDI2LTEwLTI1VDEwOjAwOjAwLjAwMFoiLCJleHBpcmVzQXQiOiIyMDI2LTEwLTI1VDEwOjE1OjAwLjAwMFoiLCJsYWIiOnsic2x1ZyI6InAyMS13ZWIiLCJ2ZXJzaW9uIjoxfSwic3RlcHMiOlt7ImdhdGhlciI6W3sibmFtZSI6Im5naW54X3Rlc3QiLCJpdGVtIjp7ImtpbmQiOiJydW4iLCJhcmd2IjpbIm5naW54IiwiLXQiXX19XX1dLCJub3RlIjoibm9uLUFTQ0lJIHN1cnZpdmVzIGJ5dGUtZXhhY3Qgc2lnbmluZzog4pyTIMOxIn0=",
+  "signature": "GXTD318qRk+9DPOhgLXebHTvgy2X6pVuH0Kn/izbzhgqeE/A0y6gkvgmEfnnRouzGVwAKh0W4WX+jBxWaSf/Cw=="
+}

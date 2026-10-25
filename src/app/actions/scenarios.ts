@@ -14,6 +14,7 @@ import {
   validateOsquery,
   normalizeObjectives,
   normalizeFlags,
+  normalizeTechniques,
 } from "@/lib/scenario-schemas";
 import { newRefToken } from "@/lib/scenarios";
 
@@ -61,6 +62,7 @@ export async function createScenario(
 
   if (!title) return { error: "Title is required." };
 
+  const techniques = normalizeTechniques(parseJsonArray(String(formData.get("techniquesJson") ?? "[]")));
   const objectives = normalizeObjectives(
     parseJsonArray(String(formData.get("objectivesJson") ?? "[]")) as { text: string }[],
   );
@@ -104,6 +106,7 @@ export async function createScenario(
       flags: flags.length ? flags : undefined,
       logs: logs ?? undefined,
       alerts: alerts ?? undefined,
+      techniques,
       refToken: newRefToken(),
       createdById: architect.id,
     },
@@ -124,6 +127,7 @@ export async function updateScenarioBasics(
   if (!title) return { error: "Title is required." };
 
   const type = formData.get("type") === "ASSESSMENT" ? "ASSESSMENT" : "DOJO";
+  const techniques = normalizeTechniques(parseJsonArray(String(formData.get("techniquesJson") ?? "[]")));
   const objectives = normalizeObjectives(
     parseJsonArray(String(formData.get("objectivesJson") ?? "[]")) as { text: string }[],
   );
@@ -145,6 +149,7 @@ export async function updateScenarioBasics(
       reportPrompt: String(formData.get("reportPrompt") ?? "").trim() || null,
       objectives,
       flags,
+      techniques,
     },
   });
 

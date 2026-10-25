@@ -1,0 +1,11 @@
+{
+  "kind": "LAB",
+  "type": "DOJO",
+  "slug": "p21-web",
+  "title": "Practical 21 — Harden the Vukani Tracking Portal",
+  "description": "Harden an nginx web server and write a Snort rule that catches SQL injection — graded on your own Ubuntu VM.",
+  "exposure": "ROLLOUT",
+  "techniques": ["T1190", "T1595.002"],
+  "brief": "brief.md",
+  "lab": "lab/lab.yaml"
+}

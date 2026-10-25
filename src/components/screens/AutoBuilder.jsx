@@ -7,6 +7,7 @@ import { FolderOpenOutlined, LoadingOutlined, DownloadOutlined, ApartmentOutline
 import { autoBuildScenario } from '@/app/actions/autobuild';
 import { filesFromInput, buildFolderFormData } from './scenarios/folderUpload';
 import { Page, SectionHeader } from './settings/parts';
+import { LabGateReport } from './labs/LabGateReport';
 
 const LAYOUT = `my-scenario/
   scenario.json        # manifest (required)
@@ -21,6 +22,17 @@ const LAYOUT = `my-scenario/
       edr.json
       osquery.json
       evidence.zip     # optional artifact`;
+
+const LAB_LAYOUT = `my-lab/
+  scenario.json        # { "kind": "LAB", "slug": "p21-web", ... }
+  brief.md             # may use {{param.token}}
+  lab/
+    lab.yaml           # roles, params, collect, parse, checks
+    assets/…           # files sent to the machine (pcaps, fixtures)
+  reference/
+    good.evidence.json     # from the answer-key machine: must score 100%
+    broken.evidence.json   # optional: must fail…
+    broken.expect.json     # …the checks listed here`;
 
 /* Auto-builder: drop one folder (scenario.json manifest + brief/guide/logs/
    alerts/endpoints) and the whole scenario is created in one shot.
@@ -39,7 +51,8 @@ export function AutoBuilder() {
     start(async () => {
       const res = await autoBuildScenario(buildFolderFormData(entries));
       setStatus(res);
-      if (res?.scenarioId && res?.ok) router.push(`/admin/scenarios/${res.scenarioId}`);
+      // Labs stay on the page so the gate report can be read; SOC scenarios open straight away.
+      if (res?.scenarioId && res?.ok && !res.lab) router.push(`/admin/scenarios/${res.scenarioId}`);
     });
   };
 
@@ -84,7 +97,16 @@ export function AutoBuilder() {
               action={status.scenarioId ? <Link href={`/admin/scenarios/${status.scenarioId}`}><Button size="small">Open the scenario</Button></Link> : null}
             />
           )}
-          {status?.ok && <Alert type="success" showIcon title={`${status.ok} Redirecting…`} />}
+          {status?.ok && !status.lab && <Alert type="success" showIcon title={`${status.ok} Redirecting…`} />}
+          {status?.ok && status.lab && (
+            <Alert
+              type="success"
+              showIcon
+              title={status.ok}
+              action={<Link href={`/admin/scenarios/${status.scenarioId}`}><Button size="small" type="primary">Open the lab</Button></Link>}
+            />
+          )}
+          {status?.lab && <LabGateReport report={status.lab} />}
         </Flex>
       </Card>
 
@@ -92,9 +114,12 @@ export function AutoBuilder() {
         title={<SectionHeader icon={<ApartmentOutlined />} title="Folder layout" />}
         extra={<a href="/api/examples/autobuild-bundle"><Button icon={<DownloadOutlined />}>Download example</Button></a>}
       >
-        <pre style={{ margin: 0, padding: '12px 14px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, fontFamily: token.fontFamilyCode, fontSize: 12.5, lineHeight: 1.6, color: token.colorTextSecondary, overflow: 'auto' }}>{LAYOUT}</pre>
+        <Typography.Text strong>SOC scenario</Typography.Text>
+        <pre style={{ margin: '6px 0 16px', padding: '12px 14px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, fontFamily: token.fontFamilyCode, fontSize: 12.5, lineHeight: 1.6, color: token.colorTextSecondary, overflow: 'auto' }}>{LAYOUT}</pre>
+        <Typography.Text strong>Lab (graded on the student&apos;s own machines)</Typography.Text>
+        <pre style={{ margin: '6px 0 0', padding: '12px 14px', borderRadius: token.borderRadius, background: token.colorFillQuaternary, fontFamily: token.fontFamilyCode, fontSize: 12.5, lineHeight: 1.6, color: token.colorTextSecondary, overflow: 'auto' }}>{LAB_LAYOUT}</pre>
         <Typography.Paragraph type="secondary" style={{ margin: '12px 0 0' }}>
-          Full spec + example: <Typography.Text code>docs/autobuild.md</Typography.Text>. Works for both Dojo and Assessment scenarios.
+          Full spec + examples: <Typography.Text code>docs/autobuild.md</Typography.Text> and <Typography.Text code>docs/labs/</Typography.Text> (example lab: <Typography.Text code>docs/examples/lab-p21-web</Typography.Text>). Works for both Dojo and Assessment.
         </Typography.Paragraph>
       </Card>
     </Page>

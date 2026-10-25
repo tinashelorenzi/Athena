@@ -3,15 +3,17 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Layout, Row, Col, Card, Statistic, Progress, Tag, Button, Typography, Flex, Space, Input, Segmented, Select,
-  Empty, Result, Steps, Avatar, Table, theme,
+  Empty, Result, Steps, Avatar, Table, Tooltip, theme,
 } from 'antd';
 import {
   RadarChartOutlined, CheckCircleOutlined, TrophyOutlined, RiseOutlined, ArrowRightOutlined, CaretRightOutlined,
   RocketOutlined, FileSearchOutlined, AlertOutlined, CodeOutlined, PaperClipOutlined, FileTextOutlined,
   AimOutlined, AppstoreOutlined, ClockCircleOutlined, UserAddOutlined, CrownOutlined, SelectOutlined, SendOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import { StudentTopBar } from './StudentTopBar';
 import { RichText } from '@/components/RichText';
+import { TechniqueTags } from '@/components/attack/TechniqueTags';
 import { Tour } from '@/components/Tour';
 import { initials } from '@/components/shell/SideShell';
 
@@ -193,7 +195,7 @@ function Catalog({ scenarios, hasCohort }) {
       if (status === 'TODO' && sc.status !== 'NOT_STARTED') return false;
       if (status === 'IN_PROGRESS' && sc.status !== 'IN_PROGRESS') return false;
       if (status === 'DONE' && !DONE.includes(sc.status)) return false;
-      return !s || `${sc.title} ${sc.description || ''}`.toLowerCase().includes(s);
+      return !s || `${sc.title} ${sc.description || ''} ${(sc.techniques || []).join(' ')}`.toLowerCase().includes(s);
     });
   }, [scenarios, q, type, status]);
 
@@ -251,6 +253,11 @@ function ScenarioCard({ scenario: s }) {
     <Card hoverable size="small" style={{ height: '100%' }} styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 16 } }}>
       <Flex align="center" gap={6}>
         <Tag color={tt.color}>{tt.label}</Tag>
+        {s.kind === 'LAB' && (
+          <Tooltip title="Done on your own virtual machine">
+            <Tag color="purple" icon={<CloudServerOutlined />}>Lab</Tag>
+          </Tooltip>
+        )}
         <div style={{ flex: 1 }} />
         <Tag color={st.color} style={{ marginInlineEnd: 0 }}>
           {st.label}{s.status === 'GRADED' && s.grade != null ? ` · ${s.grade}` : ''}
@@ -258,6 +265,7 @@ function ScenarioCard({ scenario: s }) {
       </Flex>
       <Title level={5} style={{ margin: 0 }}>{s.title}</Title>
       <Paragraph type="secondary" ellipsis={{ rows: 3 }} style={{ margin: 0, flex: 1, fontSize: 13 }}>{s.description || 'No description.'}</Paragraph>
+      <TechniqueTags ids={s.techniques} max={4} />
       <Link href={`/learn/${s.id}`}>
         <Button block type={s.status === 'NOT_STARTED' || s.status === 'IN_PROGRESS' ? 'primary' : 'default'} icon={<ArrowRightOutlined />} iconPlacement="end">
           {st.cta}

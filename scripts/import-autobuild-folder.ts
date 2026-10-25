@@ -4,6 +4,9 @@
  *   npm run import:scenario -- docs/examples/scenario-autobuild
  *   npm run import:scenario -- docs/examples/scenario-autobuild --bind "Cyber Sec - Jan 2027"
  *
+ * Lab folders (`"kind": "LAB"`, docs/labs/spec.md) are compiled and must pass
+ * the reference-evidence gate; re-importing a lab's slug adds a new version.
+ *
  * Uses DATABASE_URL from `.env`. Assigns createdById to the first architect account,
  * or the first SUPER_ADMIN if none is marked architect.
  */
@@ -57,6 +60,7 @@ async function main() {
     validateOsquery,
     normalizeObjectives,
     normalizeFlags,
+    normalizeTechniques,
   } = await import("@/lib/scenario-schemas");
   const { parseGuide } = await import("@/lib/guide");
   const { newRefToken } = await import("@/lib/scenarios");
@@ -92,6 +96,12 @@ async function main() {
   if (!architect) {
     console.error("\n  ✗ No instructor account found. Run `npm run create:superadmin` first.\n");
     process.exitCode = 1;
+    return;
+  }
+
+  if (m.kind === "LAB") {
+    await importLab(files, architect, bindCohort);
+    await prisma.$disconnect();
     return;
   }
 
@@ -146,6 +156,13 @@ async function main() {
   try {
     const logsRes = await readBundle(m.logs, "logs", validateLogs);
     const alertsRes = await readBundle(m.alerts, "alerts", validateAlerts);
+
+    // ATT&CK tags: the manifest's list plus any tagged on individual alerts.
+    const alertList = (alertsRes.data as { alerts?: { techniques?: unknown[] }[] } | undefined)?.alerts ?? [];
+    const techniques = normalizeTechniques([
+      ...(Array.isArray(m.techniques) ? m.techniques : []),
+      ...alertList.flatMap((a) => a.techniques ?? []),
+    ]);
 
     let guide: string | null = null;
     let guidePrompts: unknown;
@@ -202,6 +219,7 @@ async function main() {
         guide,
         guidePrompts: guidePrompts as object | undefined,
         guideAssets: guideAssets.length ? guideAssets : undefined,
+        techniques,
         refToken: newRefToken(),
         createdById: architect.id,
       },
@@ -244,6 +262,52 @@ async function main() {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+async function importLab(files: { rel: string; abs: string }[], architect: { id: string; name: string; email: string }, bindCohort: string) {
+  const { checkLabFolder } = await import("@/lib/labs/folder");
+  const { largestCohortSize, saveLab } = await import("@/lib/labs/save");
+  const { prisma } = await import("@/lib/db");
+  const folderFiles = await Promise.all(
+    files.map(async (f) => ({
+      rel: f.rel,
+      size: (await stat(f.abs)).size,
+      text: () => readFile(f.abs, "utf8"),
+      bytes: async () => new Uint8Array(await readFile(f.abs)),
+    })),
+  );
+  const report = await checkLabFolder(folderFiles, { maxCohortSize: (await largestCohortSize()) || undefined });
+  if (!report.ok) {
+    console.error(`
+  ✗ The lab was not accepted (npm run lab:check -- <folder> shows the full report):`);
+    for (const e of report.errors) console.error(`    ${e.file}${e.line ? `:${e.line}` : ""}  ${e.message}`);
+    console.error("");
+    process.exitCode = 1;
+    return;
+  }
+  const saved = await saveLab(report, folderFiles, architect.id);
+  if (!saved.ok) {
+    console.error(`
+  ✗ ${saved.error}
+`);
+    process.exitCode = 1;
+    return;
+  }
+  const good = report.gate.good!;
+  console.log(`
+  ✓ ${saved.created ? "Imported" : "Updated"} lab “${report.meta!.title}” (${report.meta!.slug}) — version ${saved.version}`);
+  console.log(`    Reference: ${good.score}/${good.maxScore}${report.gate.broken ? ` · broken reference ${report.gate.broken.score}/${report.gate.broken.maxScore}` : ""}`);
+  if (bindCohort && saved.created) {
+    const cohort = await prisma.cohort.findUnique({ where: { name: bindCohort } });
+    if (!cohort) console.log(`    ⚠ Cohort "${bindCohort}" not found — bind manually in Admin → Cohorts.`);
+    else {
+      await prisma.cohortScenario.create({ data: { cohortId: cohort.id, scenarioId: saved.scenarioId, boundById: architect.id } });
+      console.log(`    Bound to: ${cohort.name}`);
+    }
+  }
+  console.log(`
+    Open:  http://localhost:3000/admin/scenarios/${saved.scenarioId}
+`);
 }
 
 main().catch((err) => {

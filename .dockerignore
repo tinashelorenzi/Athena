@@ -13,3 +13,4 @@ coverage
 *.tsbuildinfo
 Dockerfile
 .dockerignore
+agent/dist

@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   AppstoreOutlined, UnorderedListOutlined, CloudServerOutlined, ControlOutlined, CheckCircleFilled,
-  SafetyCertificateOutlined, EyeOutlined, TeamOutlined, ReloadOutlined,
+  SafetyCertificateOutlined, EyeOutlined, TeamOutlined, ReloadOutlined, ExperimentOutlined,
 } from '@ant-design/icons';
 import { DOMAINS, useAttackDataset, useMatrix, useStudied } from './attackData';
 import { AttackMatrix } from './AttackMatrix';
@@ -16,8 +16,9 @@ const { Title, Text, Paragraph } = Typography;
 
 /* MITRE ATT&CK Explorer — Enterprise + ICS matrices with search, platform /
    asset filters, sub-technique expansion, technique detail (detection
-   analytics, mitigations, procedures) and personal "studied" progress. */
-export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique = null }) {
+   analytics, mitigations, procedures), personal "studied" progress, and links
+   to the Athena scenarios (`practice`) tagged with each technique. */
+export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique = null, practice = [] }) {
   const [domain, setDomain] = useState(DOMAINS[initialDomain] ? initialDomain : 'enterprise');
   const [view, setView] = useState('matrix');
   const [query, setQuery] = useState('');
@@ -25,6 +26,7 @@ export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique 
   const [assets, setAssets] = useState([]);
   const [studiedOnly, setStudiedOnly] = useState(false);
   const [expandAll, setExpandAll] = useState(false);
+  const [showCovered, setShowCovered] = useState(false);
   const [openId, setOpenId] = useState(initialTechnique);
   const { data, error } = useAttackDataset(domain);
   const [studied, toggleStudied] = useStudied();
@@ -49,6 +51,15 @@ export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique 
   const domainStudied = useMemo(
     () => (data ? data.techniques.filter((t) => studied.has(t.id)).length : 0),
     [data, studied],
+  );
+  // Techniques with a practice scenario; a parent counts when any sub-technique is covered.
+  const covered = useMemo(
+    () => new Set(practice.flatMap((s) => s.techniques.flatMap((id) => [id, id.split('.')[0]]))),
+    [practice],
+  );
+  const domainCovered = useMemo(
+    () => (data ? data.techniques.filter((t) => covered.has(t.id)).length : 0),
+    [data, covered],
   );
   const filtering = Boolean(query.trim() || platforms.length || assets.length || studiedOnly);
 
@@ -137,6 +148,16 @@ export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique 
                 <Switch size="small" checked={studiedOnly} onChange={setStudiedOnly} id="studied-only" />
                 <label htmlFor="studied-only"><Text>Studied only</Text></label>
               </Flex>
+              {view === 'matrix' && covered.size > 0 && (
+                <Tooltip title="Highlight techniques you can practise in an Athena scenario">
+                  <Flex align="center" gap={6}>
+                    <Switch size="small" checked={showCovered} onChange={setShowCovered} id="show-covered" />
+                    <label htmlFor="show-covered">
+                      <Text><ExperimentOutlined style={{ color: 'var(--ath-color-warning)' }} /> Covered in Athena ({domainCovered})</Text>
+                    </label>
+                  </Flex>
+                </Tooltip>
+              )}
               {view === 'matrix' && (
                 <Flex align="center" gap={6}>
                   <Switch size="small" checked={expandAll} onChange={setExpandAll} id="expand-all" />
@@ -165,7 +186,7 @@ export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique 
             )}
 
             {view === 'matrix' ? (
-              <AttackMatrix columns={columns} matches={matches} query={query} studied={studied} expandAll={expandAll} onOpen={open} />
+              <AttackMatrix columns={columns} matches={matches} query={query} studied={studied} covered={showCovered ? covered : null} expandAll={expandAll} onOpen={open} />
             ) : (
               <TechniqueTable data={data} matches={matches} studied={studied} onOpen={open} />
             )}
@@ -182,6 +203,7 @@ export function AttackExplorer({ initialDomain = 'enterprise', initialTechnique 
           data={data}
           id={openId && data.byId.has(openId) ? openId : null}
           studied={openId ? studied.has(openId) : false}
+          practice={practice}
           onToggleStudied={toggleStudied}
           onOpen={open}
           onClose={() => setOpenId(null)}

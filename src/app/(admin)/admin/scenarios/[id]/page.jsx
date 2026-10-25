@@ -3,6 +3,9 @@ import { ScenarioEditor } from '@/components/screens/ScenarioEditor';
 import { prisma } from '@/lib/db';
 import { requireArchitect } from '@/lib/auth';
 import { ensureRefToken } from '@/lib/scenarios';
+import { LabOverview } from '@/components/screens/labs/LabOverview';
+import { renderTemplate } from '@/lib/labs/language/template';
+import { listLabSessions } from '@/lib/labs/admin';
 
 /* Scenario detail / editor — architect-only. Edit basics + manage endpoints. */
 export default async function ScenarioDetailPage({ params }) {
@@ -11,11 +14,37 @@ export default async function ScenarioDetailPage({ params }) {
 
   const scenario = await prisma.scenario.findUnique({
     where: { id },
-    include: { endpoints: { orderBy: { hostname: 'asc' } } },
+    include: {
+      endpoints: { orderBy: { hostname: 'asc' } },
+      lab: { include: { versions: { orderBy: { version: 'desc' } } } },
+    },
   });
   if (!scenario) notFound();
 
   const refToken = await ensureRefToken(scenario.id);
+
+  if (scenario.kind === 'LAB' && scenario.lab) {
+    const [latest] = scenario.lab.versions;
+    const definition = latest?.definition ?? null;
+    // Show the brief as a student with the good reference's values would see it.
+    const refParams = latest?.gate?.referenceParams ?? null;
+    return (
+      <LabOverview
+        scenario={{
+          id: scenario.id, title: scenario.title, description: scenario.description, type: scenario.type,
+          exposure: scenario.exposure, hidden: scenario.hidden, techniques: scenario.techniques, refToken,
+          brief: refParams ? renderTemplate(scenario.brief, { param: refParams }) : scenario.brief,
+        }}
+        labId={scenario.lab.id}
+        slug={scenario.lab.slug}
+        sessions={await listLabSessions(scenario.lab.id)}
+        definition={definition}
+        gate={latest?.gate ?? null}
+        assets={latest?.assets ?? []}
+        versions={scenario.lab.versions.map((v) => ({ version: v.version, createdAt: v.createdAt.toISOString(), score: v.gate?.good?.score ?? null, maxScore: v.gate?.good?.maxScore ?? null }))}
+      />
+    );
+  }
 
   const view = {
     id: scenario.id,
@@ -29,6 +58,7 @@ export default async function ScenarioDetailPage({ params }) {
     brief: scenario.brief,
     objectives: scenario.objectives || [],
     flags: scenario.flags || [],
+    techniques: scenario.techniques,
     reportRequired: scenario.reportRequired,
     reportPrompt: scenario.reportPrompt || '',
     hasLogs: scenario.logs != null,

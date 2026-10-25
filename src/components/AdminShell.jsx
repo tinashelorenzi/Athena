@@ -2,7 +2,7 @@
 import React from 'react';
 import {
   DashboardOutlined, TeamOutlined, ApartmentOutlined, EditOutlined, ProfileOutlined,
-  AppstoreOutlined, SettingOutlined, AimOutlined, ExperimentOutlined,
+  AppstoreOutlined, SettingOutlined, AimOutlined, ExperimentOutlined, CloudServerOutlined,
 } from '@ant-design/icons';
 import { SideShell } from '@/components/shell/SideShell';
 
@@ -16,6 +16,7 @@ const TITLES = {
   '/admin/scenarios': 'Scenario Authoring',
   '/admin/settings': 'Settings',
   '/attack': 'MITRE ATT&CK Explorer',
+  '/machines': 'My Machines',
 };
 
 export function AdminShell({ children, user }) {
@@ -33,6 +34,7 @@ export function AdminShell({ children, user }) {
     isArchitect && {
       type: 'group', label: 'Authoring', children: [
         { key: '/admin/scenarios', icon: <AppstoreOutlined />, label: 'Scenarios' },
+        { key: '/machines', icon: <CloudServerOutlined />, label: 'My machines' },
       ],
     },
     {

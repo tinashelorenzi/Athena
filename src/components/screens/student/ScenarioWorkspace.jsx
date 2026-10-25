@@ -13,6 +13,7 @@ import {
   DeleteOutlined, LockOutlined, TrophyOutlined, EditOutlined, AuditOutlined, CloseOutlined, FileDoneOutlined,
 } from '@ant-design/icons';
 import { Markdown } from '@/components/Markdown';
+import { TechniqueTags } from '@/components/attack/TechniqueTags';
 import { RichText } from '@/components/RichText';
 import { StudentTopBar } from './StudentTopBar';
 import { GuideView } from './GuideView';
@@ -397,6 +398,14 @@ function BriefPanel({ scenario }) {
     <Flex vertical gap={16}>
       <PanelHeader icon={<FileTextOutlined />} title="Briefing" sub="What happened, and what you need to find out." />
       <Card>{scenario.brief ? <Markdown>{scenario.brief}</Markdown> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No briefing provided." />}</Card>
+      {scenario.techniques?.length > 0 && (
+        <Card size="small" title={<Space><AimOutlined />MITRE ATT&amp;CK techniques</Space>}>
+          <Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 10 }}>
+            The adversary behaviour this scenario covers. Open a technique to read how it is detected and mitigated.
+          </Paragraph>
+          <TechniqueTags ids={scenario.techniques} />
+        </Card>
+      )}
       {scenario.objectives?.length > 0 && (
         <Card title={<Space><AimOutlined />Objectives</Space>} styles={{ body: { paddingBlock: 4 } }}>
           {scenario.objectives.map((o, i) => (

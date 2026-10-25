@@ -49,6 +49,10 @@ model User {
   guideSolves  GuidePromptSolve[]
   flagSolves   FlagSolve[]
   alertCases   AlertCase[]
+  machines     Machine[]
+  machineEnrollCodes MachineEnrollCode[]
+  labParams    LabParam[]
+  labSessions  LabSession[]
 
   @@index([cohortId])
   @@map("users")
@@ -132,6 +136,10 @@ model Submission {
   /// student may re-do an assessment freely.
   committedAt   DateTime?
   committedById String?
+  /// LAB scenarios: the ended lab session this submission came from (its
+  /// final check run is the auto-grade). Null for SOC scenarios.
+  labSessionId  String?          @unique
+  labSession    LabSession?      @relation(fields: [labSessionId], references: [id], onDelete: SetNull)
   submittedAt DateTime         @default(now())
 
   @@unique([scenarioId, studentId])
@@ -185,6 +193,9 @@ model Setting {
 /// define what the student sees as raw SOC data. See docs/scenario-schemas.md.
 model Scenario {
   id             String             @id @default(cuid())
+  /// SOC (SIEM-style Dojo/Assessment) or LAB (graded on the student's own
+  /// machines, docs/labs/spec.md). `type` keeps its Dojo/Assessment meaning for both.
+  kind           ScenarioKind       @default(SOC)
   type           ScenarioType
   title          String
   description    String             @default("")
@@ -212,6 +223,9 @@ model Scenario {
   guide          String?            @db.Text
   guidePrompts   Json?
   guideAssets    Json?
+  /// MITRE ATT&CK technique IDs the scenario exercises (e.g. "T1059.001",
+  /// "T0855"). Enterprise (T1xxx) and ICS (T0xxx) may be mixed; links into /attack.
+  techniques     String[]           @default([])
   createdById    String
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -223,6 +237,7 @@ model Scenario {
   guideSolves    GuidePromptSolve[]
   flagSolves     FlagSolve[]
   alertCases     AlertCase[]
+  lab            Lab?
 
   @@index([type])
   @@map("scenarios")
@@ -359,6 +374,11 @@ enum ScenarioType {
   ASSESSMENT
 }
 
+enum ScenarioKind {
+  SOC
+  LAB
+}
+
 enum Exposure {
   ROLLOUT
   PUBLIC
@@ -399,4 +419,288 @@ model Session {
 enum Role {
   SUPER_ADMIN
   STUDENT
+}
+
+// ── Labs: student machines (docs/labs/spec.md) ───────────────────────────────
+
+/// A student-owned VM enrolled with the `zaio` agent. A user may have several.
+/// The agent proves it is this machine by signing every request with the
+/// private half of `publicKey` (spec 7.2).
+model Machine {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label          String
+  /// Hostname Athena assigned at enrolment: zaio-<handle>-<NN>.
+  hostname       String
+  /// Ed25519 public key, base64 of the raw 32 bytes.
+  publicKey      String
+  /// `SHA256:` + unpadded base64 of sha256(raw key).
+  keyFingerprint String
+  /// /etc/machine-id and DMI product_uuid — used to spot one VM enrolled by two students.
+  machineId      String
+  productUuid    String?
+  os             String
+  osVersion      String
+  osPretty       String        @default("")
+  arch           String
+  agentVersion   String
+  capabilities   String[]      @default([])
+  /// Instructor-facing signals raised on this machine, e.g. MACHINE_SHARED.
+  flags          String[]      @default([])
+  status         MachineStatus @default(ACTIVE)
+  enrolledAt     DateTime      @default(now())
+  revokedAt      DateTime?
+  lastSeenAt     DateTime?
+  lastSeenIp     String?
+  sessionRoles   LabSessionMachine[]
+  tasks          AgentTask[]
+
+  @@index([userId])
+  @@index([machineId])
+  @@map("machines")
+}
+
+enum MachineStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// One-time enrolment code (10 minutes, single use). Only sha256(code) is stored.
+model MachineEnrollCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("machine_enroll_codes")
+}
+
+/// Replay cache for signed agent requests: (machine, ts, signature) seen in the
+/// last 10 minutes. Kept in Postgres so it survives restarts.
+model AgentRequestNonce {
+  key       String   @id
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("agent_request_nonces")
+}
+
+/// Append-only audit log for labs: enrolments, revocations, rejected requests,
+/// flags, overrides. Also backs enrolment rate limiting (ENROL_FAILED rows).
+model LabAuditEvent {
+  id        String   @id @default(cuid())
+  type      String
+  userId    String?
+  machineId String?
+  detail    Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([userId, createdAt])
+  @@index([ip, createdAt])
+  @@map("lab_audit_events")
+}
+
+// ── Labs: definitions and per-student parameters ─────────────────────────────
+
+/// The lab behind a LAB scenario. `slug` is what students type (`zaio start p21-web`)
+/// and what the Autobuilder matches on re-upload.
+model Lab {
+  id         String       @id @default(cuid())
+  scenarioId String       @unique
+  scenario   Scenario     @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  slug       String       @unique
+  createdAt  DateTime     @default(now())
+  versions   LabVersion[]
+  params     LabParam[]
+
+  @@map("labs")
+}
+
+/// One immutable upload of a lab. Sessions pin to a version, so re-uploading
+/// never changes how a running session is graded.
+model LabVersion {
+  id          String   @id @default(cuid())
+  labId       String
+  lab         Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  version     Int
+  /// Lab-language version the definition was written in.
+  zcl         Int
+  /// Compiled lab.yaml (src/lib/labs/language/types.ts CompiledLab).
+  definition  Json
+  /// [{ name, file, sha256, size, storageKey }]
+  assets      Json
+  /// The reference-evidence gate result recorded at upload.
+  gate        Json
+  /// The lab.yaml text this version was compiled from (for the check editor).
+  source      String?  @db.Text
+  /// Reference evidence from the upload: { good?, broken?, brokenExpect? }
+  /// (lab/reference/*.json), so the check editor and re-publishing can re-run the gate.
+  references  Json?
+  createdById String
+  createdAt   DateTime @default(now())
+  sessions    LabSession[]
+
+  @@unique([labId, version])
+  @@map("lab_versions")
+}
+
+/// A student's parameter values for a lab, generated on first view and kept,
+/// so they never change mid-lab and copy detection is a lookup.
+model LabParam {
+  labId     String
+  lab       Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  values    Json
+  createdAt DateTime @default(now())
+
+  @@id([labId, userId])
+  @@index([labId])
+  @@map("lab_params")
+}
+
+// ── Labs: sessions, check runs and the agent task queue (spec section 8) ─────
+
+/// One bracketed attempt at a lab: baseline at start, work, checks, final grade.
+/// Pinned to the LabVersion it started on.
+model LabSession {
+  id           String              @id @default(cuid())
+  labVersionId String
+  labVersion   LabVersion          @relation(fields: [labVersionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       LabSessionStatus    @default(PREPARING)
+  /// Random per session; available to labs as {{session.nonce}}.
+  nonce        String
+  createdAt    DateTime            @default(now())
+  /// Set when every machine's baseline is in (status → ACTIVE).
+  startedAt    DateTime?
+  /// Time limit or lab close, whichever is first. Null = no limit.
+  deadlineAt   DateTime?
+  endedAt      DateTime?
+  /// Final grade (from the final check run).
+  score        Int?
+  maxScore     Int?
+  flags        String[]            @default([])
+  /// Instructor override of the final score (out of maxScore), with a reason.
+  /// The effective score is overrideScore ?? score.
+  overrideScore  Int?
+  overrideReason String?
+  overrideById   String?
+  overrideAt     DateTime?
+  /// Why a session was aborted/expired, shown to the student.
+  note         String?
+  machines     LabSessionMachine[]
+  checkRuns    LabCheckRun[]
+  tasks        AgentTask[]
+  submission   Submission?
+
+  @@index([userId, status])
+  @@index([labVersionId])
+  @@map("lab_sessions")
+}
+
+enum LabSessionStatus {
+  PREPARING
+  ACTIVE
+  ENDING
+  ENDED
+  EXPIRED
+  ABORTED
+}
+
+/// A machine filling one of the lab's roles in a session, with its baseline.
+model LabSessionMachine {
+  sessionId String
+  session   LabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String
+  machineId String
+  machine   Machine    @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  /// { files: {path: sha256}, logs: {path: {size, inode}}, bootId, takenAt }
+  baseline  Json?
+
+  @@id([sessionId, role])
+  @@index([machineId])
+  @@map("lab_session_machines")
+}
+
+/// One evaluation inside a session: practice checks, or the final one at end.
+model LabCheckRun {
+  id          String         @id @default(cuid())
+  sessionId   String
+  session     LabSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  final       Boolean        @default(false)
+  status      CheckRunStatus @default(COLLECTING)
+  requestedAt DateTime       @default(now())
+  completedAt DateTime?
+  /// Evidence per role (protocol/schema/evidence.schema.json roles), size-capped.
+  evidence    Json?
+  /// GradeResult (src/lib/labs/language/grade.ts) minus parsed values.
+  result      Json?
+  score       Int?
+  maxScore    Int?
+  graderRev   String?
+  /// Set when an instructor re-graded this run (the audit log keeps the old result).
+  regradedAt  DateTime?
+  /// LabVersion whose checks produced `result` (differs from the session's when re-graded against a newer version).
+  gradedWithVersionId String?
+  tasks       AgentTask[]
+
+  @@index([sessionId, requestedAt])
+  @@map("lab_check_runs")
+}
+
+enum CheckRunStatus {
+  COLLECTING
+  GRADED
+  FAILED
+}
+
+/// Work queued for one machine's agent, carrying a signed bundle.
+model AgentTask {
+  id          String          @id @default(cuid())
+  machineId   String
+  machine     Machine         @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     LabSession?     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  checkRunId  String?
+  checkRun    LabCheckRun?    @relation(fields: [checkRunId], references: [id], onDelete: Cascade)
+  role        String?
+  kind        AgentTaskKind
+  /// The exact bytes that were signed (UTF-8 JSON).
+  bundle      Bytes
+  signature   String
+  keyId       String
+  status      AgentTaskStatus @default(QUEUED)
+  createdAt   DateTime        @default(now())
+  expiresAt   DateTime
+  deliveredAt DateTime?
+  completedAt DateTime?
+  /// Agent-reported failure, if any.
+  error       String?
+
+  @@index([machineId, status])
+  @@index([sessionId])
+  @@map("agent_tasks")
+}
+
+enum AgentTaskKind {
+  BASELINE
+  COLLECT
+  UNDO
+}
+
+enum AgentTaskStatus {
+  QUEUED
+  DELIVERED
+  DONE
+  FAILED
+  EXPIRED
 }

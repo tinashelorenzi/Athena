@@ -1,17 +1,21 @@
 'use client';
 import React from 'react';
+import Link from 'next/link';
 import {
   Drawer, Tabs, Tag, Typography, Flex, Button, Collapse, Table, Empty, Descriptions, Card, Tooltip, Breadcrumb, Badge,
 } from 'antd';
-import { ExportOutlined, CheckCircleFilled, CheckCircleOutlined, ApartmentOutlined } from '@ant-design/icons';
+import {
+  ExportOutlined, CheckCircleFilled, CheckCircleOutlined, ApartmentOutlined, ExperimentOutlined, ArrowRightOutlined,
+} from '@ant-design/icons';
 import { Markdown } from '@/components/Markdown';
+import { StackList } from '@/components/ds/StackList';
 import { prose, techniqueFromHref } from './attackData';
 
 const { Text, Title, Paragraph } = Typography;
 
 /* Full technique detail, organised the way an analyst uses it:
    what it is → how to detect it → how to mitigate → who uses it. */
-export function TechniqueDrawer({ data, id, studied, onToggleStudied, onOpen, onClose }) {
+export function TechniqueDrawer({ data, id, studied, practice = [], onToggleStudied, onOpen, onClose }) {
   const t = id ? data?.byId.get(id) : null;
   const parent = t?.isSub ? data.byId.get(t.parent) : null;
   const subs = t && !t.isSub ? data.subs.get(t.id) || [] : [];
@@ -86,6 +90,8 @@ export function TechniqueDrawer({ data, id, studied, onToggleStudied, onOpen, on
             ].filter(Boolean)}
           />
 
+          <Practice t={t} practice={practice} />
+
           <Tabs
             items={[
               {
@@ -141,6 +147,58 @@ export function TechniqueDrawer({ data, id, studied, onToggleStudied, onOpen, on
         </div>
       )}
     </Drawer>
+  );
+}
+
+const TYPE_TAG = { DOJO: { color: 'blue', label: 'Dojo' }, ASSESSMENT: { color: 'purple', label: 'Assessment' } };
+const STATUS_TAG = {
+  IN_PROGRESS: { color: 'processing', label: 'In progress' },
+  COMPLETED: { color: 'success', label: 'Completed' },
+  SUBMITTED: { color: 'gold', label: 'Submitted' },
+  GRADED: { color: 'success', label: 'Graded' },
+};
+
+/* "Practice in Athena": scenarios tagged with this technique — or, for a parent
+   technique, with any of its sub-techniques. */
+function Practice({ t, practice }) {
+  const matches = practice.filter((s) =>
+    s.techniques.some((id) => id === t.id || (!t.isSub && id.startsWith(`${t.id}.`))),
+  );
+  if (!matches.length) return null;
+  return (
+    <Card
+      size="small"
+      style={{ marginBottom: 16, borderColor: 'var(--ath-color-warning-border)' }}
+      styles={{ header: { background: 'var(--ath-color-warning-bg)' } }}
+      title={<Flex gap={8} align="center"><ExperimentOutlined style={{ color: 'var(--ath-color-warning)' }} />Practice in Athena</Flex>}
+    >
+      <StackList
+        items={matches}
+        rowKey={(s) => s.id}
+        renderItem={(s) => {
+          const type = TYPE_TAG[s.type] || TYPE_TAG.DOJO;
+          const status = STATUS_TAG[s.status];
+          const subs = s.techniques.filter((id) => id !== t.id && id.startsWith(`${t.id}.`));
+          return (
+            <Flex gap={12} align="center" justify="space-between">
+              <Flex gap={6} align="center" wrap>
+                <Tag color={type.color} style={{ margin: 0 }}>{type.label}</Tag>
+                <Text strong>{s.title}</Text>
+                {status && <Tag color={status.color} style={{ margin: 0 }}>{status.label}</Tag>}
+                {subs.length > 0 && <Text type="secondary" style={{ fontSize: 12 }}>via {subs.join(', ')}</Text>}
+              </Flex>
+              {s.href && (
+                <Link href={s.href}>
+                  <Button size="small" type="primary" icon={<ArrowRightOutlined />} iconPlacement="end">
+                    {s.status === 'NOT_STARTED' ? 'Start' : 'Open'}
+                  </Button>
+                </Link>
+              )}
+            </Flex>
+          );
+        }}
+      />
+    </Card>
   );
 }
 

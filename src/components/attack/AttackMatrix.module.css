@@ -60,7 +60,11 @@
 }
 .cell:hover { border-color: var(--ath-color-primary); box-shadow: 0 1px 4px rgba(53, 56, 212, 0.12); }
 .cellStudied { border-left: 3px solid var(--ath-color-success); }
+.cellCovered { background: var(--ath-color-warning-bg); border-color: var(--ath-color-warning-border); }
 .cellMatch { background: var(--ath-color-primary-bg); border-color: var(--ath-color-primary-border); }
+/* Keep the studied stripe visible over a highlight's border colour. */
+.cellStudied.cellCovered,
+.cellStudied.cellMatch { border-left-color: var(--ath-color-success); }
 
 .cellMain {
   flex: 1;

@@ -1,12 +1,13 @@
 'use client';
 import React, { useState } from 'react';
 import { Popover, Progress, Tooltip, Typography } from 'antd';
-import { CheckCircleFilled, DownOutlined, RightOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, DownOutlined, ExperimentOutlined, RightOutlined } from '@ant-design/icons';
 import styles from './AttackMatrix.module.css';
 
 /* Navigator-style matrix: tactics as columns, techniques as cells, sub-techniques
-   expand inline. Filtering is done upstream (useMatrix); this only lays out. */
-export function AttackMatrix({ columns, matches, query, studied, expandAll, onOpen }) {
+   expand inline. Filtering is done upstream (useMatrix); this only lays out.
+   `covered` (a Set, or null when off) highlights techniques with an Athena scenario. */
+export function AttackMatrix({ columns, matches, query, studied, covered = null, expandAll, onOpen }) {
   const [expanded, setExpanded] = useState(() => new Set());
   const toggle = (id) => setExpanded((prev) => {
     const next = new Set(prev);
@@ -48,6 +49,7 @@ export function AttackMatrix({ columns, matches, query, studied, expandAll, onOp
                       <Cell
                         t={t}
                         studied={studied.has(t.id)}
+                        covered={covered?.has(t.id)}
                         highlight={searching && self}
                         onOpen={onOpen}
                         subCount={subs.length}
@@ -57,7 +59,7 @@ export function AttackMatrix({ columns, matches, query, studied, expandAll, onOp
                       {open && shownSubs.length > 0 && (
                         <div className={styles.subs}>
                           {shownSubs.map((s) => (
-                            <Cell key={s.id} t={s} studied={studied.has(s.id)} highlight={searching && matches.has(s.id)} onOpen={onOpen} />
+                            <Cell key={s.id} t={s} studied={studied.has(s.id)} covered={covered?.has(s.id)} highlight={searching && matches.has(s.id)} onOpen={onOpen} />
                           ))}
                         </div>
                       )}
@@ -76,14 +78,15 @@ export function AttackMatrix({ columns, matches, query, studied, expandAll, onOp
   );
 }
 
-function Cell({ t, studied, highlight, onOpen, subCount = 0, open, onToggle }) {
-  const cls = [styles.cell, studied && styles.cellStudied, highlight && styles.cellMatch].filter(Boolean).join(' ');
+function Cell({ t, studied, covered, highlight, onOpen, subCount = 0, open, onToggle }) {
+  const cls = [styles.cell, studied && styles.cellStudied, covered && styles.cellCovered, highlight && styles.cellMatch].filter(Boolean).join(' ');
   return (
     <div className={cls}>
       <button type="button" className={styles.cellMain} onClick={() => onOpen(t.id)}>
         <div className={styles.cellName}>
           {t.name}
           {studied && <CheckCircleFilled style={{ color: 'var(--ath-color-success)', fontSize: 11, marginLeft: 5 }} />}
+          {covered && <ExperimentOutlined aria-label="Practice scenario available" style={{ color: 'var(--ath-color-warning)', fontSize: 11, marginLeft: 5 }} />}
         </div>
         <div className={styles.cellId}>{t.id}</div>
       </button>

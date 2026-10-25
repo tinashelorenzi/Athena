@@ -44,6 +44,7 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
     include: {
       student: { select: { name: true, cohort: { select: { id: true, name: true } } } },
       scenario: { select: { title: true, type: true, flags: true } },
+      labSession: { select: { score: true, overrideScore: true, maxScore: true, flags: true, endedAt: true } },
     },
   });
 
@@ -64,7 +65,12 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
     const correctPoints = flagReview.filter((f) => f.correct).reduce((a, f) => a + f.points, 0);
     let autoGrade: number | null = null;
     let autoBasis = "";
-    if (flagsTotal > 0) {
+    if (s.labSession?.maxScore) {
+      // Labs: the final check of the session that produced this submission.
+      const labScore = s.labSession.overrideScore ?? s.labSession.score ?? 0;
+      autoGrade = Math.round((labScore / s.labSession.maxScore) * 100);
+      autoBasis = `lab ${labScore}/${s.labSession.maxScore}${s.labSession.overrideScore != null ? " (adjusted)" : ""}${s.labSession.flags.length ? ` · flagged: ${s.labSession.flags.join(", ")}` : ""}`;
+    } else if (flagsTotal > 0) {
       if (totalPoints > 0) {
         autoGrade = Math.round((correctPoints / totalPoints) * 100);
         autoBasis = `${correctPoints}/${totalPoints} pts`;

@@ -1,0 +1,44 @@
+{
+  "description": "Request-signing test vectors (docs/labs/spec.md 7.2). Ed25519 is deterministic, so every implementation must reproduce stringToSign and signature exactly. TEST KEY ONLY.",
+  "seed": "aUu2D+kBRZs2547hb8QXQMr3w5WTkyJnuieDxdX8j3s=",
+  "publicKey": "Prwd/i9p8WscbvOxU7v1OEcObGVoSEqeHOQPZYXgS0o=",
+  "fingerprint": "SHA256:3DLR9d/EtYbzpwTJ6I8CljvKr/R80IfCSh5kj3zBRiw",
+  "vectors": [
+    {
+      "name": "GET without body",
+      "method": "GET",
+      "path": "/api/agent/tasks?wait=25",
+      "ts": 1793000000,
+      "body": "",
+      "stringToSign": "GET\n/api/agent/tasks?wait=25\n1793000000\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "VqwaKmOsXTbAJNvmlMbpHSaDRdU7FhxhNgfOfx1tmel6N67w/52bj4owj9O8cyCgf8VrOh79qp0phKF1nm2cCw=="
+    },
+    {
+      "name": "GET me",
+      "method": "GET",
+      "path": "/api/agent/me",
+      "ts": 1793000123,
+      "body": "",
+      "stringToSign": "GET\n/api/agent/me\n1793000123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "GIqiu8fKi0luZs+sHE1pJ/fhQy45uPQ8cNfqcYvPJ5Rw7/uhjZwrIoNiGqvgrYb54Wlm96RI6uOtqN7BQNXHCA=="
+    },
+    {
+      "name": "POST with JSON body",
+      "method": "POST",
+      "path": "/api/agent/tasks/t_123/result",
+      "ts": 1793000456,
+      "body": "{\"ok\":true,\"results\":{\"a\":{\"ok\":true,\"data\":{\"exit_code\":0}}}}",
+      "stringToSign": "POST\n/api/agent/tasks/t_123/result\n1793000456\n8950d722e5dd45926d455a42397d300b5722fed2b169db45a9b01fe90bf55f55",
+      "signature": "dIgpjP2q+AJGWA4jofhiEf0P8BiNIcltJTtSayfeK87Nxh18ojSVwQR5hnnrNDvf26sf+OI5y+ssbdDTV4IBCQ=="
+    },
+    {
+      "name": "POST with non-ASCII body",
+      "method": "POST",
+      "path": "/api/agent/sessions",
+      "ts": 1793000789,
+      "body": "{\"lab\":\"p21-web\",\"note\":\"Vukani — ñ ✓\"}",
+      "stringToSign": "POST\n/api/agent/sessions\n1793000789\nc5f0da03847276a35e54785564e70036b1667f20a4d252f7e751885c1fb1da6f",
+      "signature": "/MG4Cr4DNMHbqKaHMYf1IsaiH1T2Dfhby+cp5dz6ccyc+XVdSMZ4ry2fXA8EVO97dGsKubQSIS9RCxGNuSQgBg=="
+    }
+  ]
+}

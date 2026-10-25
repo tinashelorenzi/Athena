@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zaio/error",
+  "title": "Error body (every non-2xx response)",
+  "type": "object",
+  "required": ["error", "message"],
+  "properties": {
+    "error": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Stable machine-readable code, e.g. invalid_code, machine_revoked, bad_signature, rate_limited." },
+    "message": { "type": "string" },
+    "retryAfter": { "type": "integer", "minimum": 0, "description": "Seconds; present on rate_limited." }
+  }
+}

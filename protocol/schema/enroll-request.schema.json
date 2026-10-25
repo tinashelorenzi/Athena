@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "zaio/enroll-request",
+  "title": "POST /api/agent/enroll — request (unsigned; the code is the credential)",
+  "type": "object",
+  "required": ["email", "code", "publicKey", "machineId", "os", "osVersion", "arch", "agentVersion", "capabilities"],
+  "properties": {
+    "email": { "type": "string", "maxLength": 254 },
+    "code": { "type": "string", "description": "As shown in Athena, e.g. K7Q2-9XMP. Case, spaces and dashes are ignored." },
+    "label": { "type": "string", "maxLength": 40, "description": "Student-chosen name; defaults to the machine hostname." },
+    "publicKey": { "type": "string", "description": "base64 of the raw 32-byte Ed25519 public key." },
+    "machineId": { "type": "string", "pattern": "^[0-9a-f]{32}$", "description": "/etc/machine-id" },
+    "productUuid": { "type": ["string", "null"], "maxLength": 64, "description": "/sys/class/dmi/id/product_uuid when readable." },
+    "os": { "type": "string", "examples": ["ubuntu"] },
+    "osVersion": { "type": "string", "examples": ["24.04"] },
+    "osPretty": { "type": "string", "examples": ["Ubuntu 24.04.5 LTS"] },
+    "arch": { "enum": ["amd64", "arm64"] },
+    "hostname": { "type": "string", "description": "Current hostname before setup changes it." },
+    "agentVersion": { "type": "string" },
+    "capabilities": { "type": "array", "items": { "type": "string" } }
+  }
+}

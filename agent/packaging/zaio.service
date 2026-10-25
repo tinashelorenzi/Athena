@@ -1,0 +1,14 @@
+# Installed by the .deb to /lib/systemd/system/zaio.service.
+# `zaio setup` writes an equivalent unit to /etc/systemd/system when this file is absent.
+[Unit]
+Description=Athena Labs agent (zaio)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/zaio daemon
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

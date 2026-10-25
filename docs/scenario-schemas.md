@@ -26,6 +26,7 @@ these schemas), not in the student-facing bundles.
 | `ScenarioEndpoint.osquery` | OSQuery data | [osquery-schema.md](./osquery-schema.md) | Per-endpoint osquery table snapshots (SQL-table data model). |
 | Object storage | Evidence artifacts | [artifacts.md](./artifacts.md) | One uploaded evidence ZIP per endpoint (memory dump, pcap, disk excerpt). |
 | `Scenario.guide` | Learning guide | [guide-folder.md](./guide-folder.md) | Teaching guide folder (`main.md` + images) with inline CTF `prompt` blocks. |
+| `Scenario.techniques` | ATT&CK tags | (below) | MITRE ATT&CK technique IDs the scenario exercises. |
 
 ## Building whole scenarios
 
@@ -34,6 +35,17 @@ folder and drop it into the **[Auto-builder](./autobuild.md)** — one folder wi
 `scenario.json` manifest that references all of the bundles above (plus the brief
 and guide). A complete example lives in
 [`examples/scenario-autobuild/`](./examples/scenario-autobuild/).
+
+## MITRE ATT&CK technique tags
+
+`Scenario.techniques` is a plain list of ATT&CK technique / sub-technique IDs —
+Enterprise (`T1059.001`) and ICS (`T0855`) can be mixed. Pick them in the editor's
+**Basics → ATT&CK techniques** select, list them under `techniques` in an
+auto-build manifest, or tag individual alerts (see
+[alerts-schema.md](./alerts-schema.md#attck-technique-tags)). Students see the tags on
+scenario cards and in the brief, each linking to the technique in the
+[ATT&CK Explorer](/attack); the explorer's technique drawer lists the released
+scenarios that let a student practise it.
 
 ## Shared conventions
 

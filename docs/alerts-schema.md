@@ -18,6 +18,7 @@ according to their `seek` offset, so an investigation unfolds at a realistic pac
       "source": "10.0.0.5",
       "destination": "185.220.101.34",
       "rule": "T1059.001",
+      "techniques": ["T1059.001"],
       "count": 24,
       "fields": { }
     }
@@ -36,6 +37,7 @@ according to their `seek` offset, so an investigation unfolds at a realistic pac
 | `source` | string | No | Source IP or host, when applicable. |
 | `destination` | string | No | Destination IP or host, when applicable. |
 | `rule` | string | No | Detection rule id or name that produced the alert, e.g. an ATT&CK technique id like `T1059.001`. |
+| `techniques` | string[] | No | MITRE ATT&CK technique IDs the alert relates to, e.g. `["T1059.001"]`. See [below](#attck-technique-tags). |
 | `count` | integer | No | Number of underlying events the alert aggregates. |
 | `fields` | object | No | Arbitrary raw key/value pairs specific to the detection. |
 
@@ -45,6 +47,15 @@ according to their `seek` offset, so an investigation unfolds at a realistic pac
 "Encoded PowerShell command executed", not "Malicious PowerShell detected". Do not
 add `severity`, `verdict`, or `priority` fields — the queue renders every alert
 uniformly and it is the student's job to triage.
+
+### ATT&CK technique tags
+
+`techniques` is an optional array of ATT&CK technique / sub-technique IDs
+(`T1234` or `T1234.567`; ICS IDs are `T0xxx`). Anything else fails validation.
+The tags are authoring metadata: they are **not** shown in the student's alert queue
+(that would give the triage away). When a scenario is built from a folder, every
+alert's tags are merged into the scenario's own `techniques` list, which is what
+links the scenario to the ATT&CK Explorer.
 
 ## The `seek` concept
 

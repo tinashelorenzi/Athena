@@ -12,7 +12,10 @@ export type StudentScenarioCard = {
   id: string;
   title: string;
   type: "DOJO" | "ASSESSMENT";
+  /** SOC = SIEM workspace; LAB = graded on the student's own machines. */
+  kind: "SOC" | "LAB";
   description: string;
+  techniques: string[];
   status: StudentScenarioStatus;
   grade: number | null;
 };
@@ -20,7 +23,7 @@ export type StudentScenarioCard = {
 export async function getStudentScenarios(userId: string): Promise<StudentScenarioCard[]> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { cohortId: true } });
 
-  const cardSelect = { id: true, title: true, type: true, description: true } as const;
+  const cardSelect = { id: true, title: true, type: true, description: true, techniques: true, kind: true } as const;
 
   // A student sees: PUBLIC scenarios (everyone, no binding needed) + the
   // restricted (ROLLOUT) scenarios bound to their cohort. `hidden` scenarios are
@@ -41,7 +44,7 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   ]);
 
   // Merge unique (cohort-bound first, then public not already listed).
-  const scenarioMap = new Map<string, { id: string; title: string; type: string; description: string }>();
+  const scenarioMap = new Map<string, { id: string; title: string; type: string; kind: string; description: string; techniques: string[] }>();
   for (const b of bindings) scenarioMap.set(b.scenario.id, b.scenario);
   for (const s of publicScenarios) if (!scenarioMap.has(s.id)) scenarioMap.set(s.id, s);
 
@@ -49,11 +52,22 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   if (scenarios.length === 0) return [];
   const scenarioIds = scenarios.map((s) => s.id);
 
-  const [progress, submissions, runs] = await Promise.all([
+  const [progress, submissions, runs, labSessions] = await Promise.all([
     prisma.scenarioProgress.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true } }),
     prisma.submission.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true, grade: true, releasedAt: true } }),
     prisma.scenarioRun.findMany({ where: { studentId: userId, scenarioId: { in: scenarioIds } }, select: { scenarioId: true, status: true } }),
+    prisma.labSession.findMany({
+      where: { userId, labVersion: { lab: { scenarioId: { in: scenarioIds } } } },
+      select: { status: true, labVersion: { select: { lab: { select: { scenarioId: true } } } } },
+    }),
   ]);
+  // Labs: a running session = in progress, a finished one = completed (Dojo).
+  const labState = new Map<string, "IN_PROGRESS" | "COMPLETED">();
+  for (const ls of labSessions) {
+    const id = ls.labVersion.lab.scenarioId;
+    if (["PREPARING", "ACTIVE", "ENDING"].includes(ls.status)) labState.set(id, "IN_PROGRESS");
+    else if (ls.status === "ENDED" && labState.get(id) !== "IN_PROGRESS") labState.set(id, "COMPLETED");
+  }
   const started = new Set(progress.map((p) => p.scenarioId));
   const subMap = new Map(submissions.map((s) => [s.scenarioId, s]));
   const runMap = new Map(runs.map((r) => [r.scenarioId, r.status]));
@@ -65,14 +79,17 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
     const released = Boolean(sub && sub.status === "GRADED" && sub.releasedAt != null);
     let status: StudentScenarioStatus;
     if (sub) status = released ? "GRADED" : "SUBMITTED";
-    else if (runStatus === "COMPLETED") status = "COMPLETED";
+    else if (labState.get(sc.id) === "IN_PROGRESS") status = "IN_PROGRESS";
+    else if (runStatus === "COMPLETED" || labState.get(sc.id) === "COMPLETED") status = "COMPLETED";
     else if (runStatus || started.has(sc.id)) status = "IN_PROGRESS";
     else status = "NOT_STARTED";
     return {
       id: sc.id,
       title: sc.title,
       type: sc.type as "DOJO" | "ASSESSMENT",
+      kind: sc.kind as "SOC" | "LAB",
       description: sc.description,
+      techniques: sc.techniques,
       status,
       grade: released ? sub?.grade ?? null : null,
     };
@@ -85,7 +102,7 @@ export async function getStudentScenario(userId: string, scenarioId: string) {
     where: { id: scenarioId },
     include: { endpoints: { orderBy: { hostname: "asc" } } },
   });
-  if (!scenario) return null;
+  if (!scenario || scenario.kind !== "SOC") return null;
 
   // PUBLIC scenarios are open to any authenticated student; others require the
   // student's cohort to be bound to the scenario.

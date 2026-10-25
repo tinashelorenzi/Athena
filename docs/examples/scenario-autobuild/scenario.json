@@ -4,6 +4,7 @@
   "description": "A finance workstation shows signs of ransomware staging. Trace the intrusion from initial access to impact.",
   "exposure": "ROLLOUT",
   "hidden": false,
+  "techniques": ["T1566.001", "T1059.001", "T1071", "T1490", "T1486"],
   "brief": "brief.md",
   "objectives": [
     "Identify the initial access vector",

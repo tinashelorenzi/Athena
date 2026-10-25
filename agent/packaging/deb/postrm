@@ -1,0 +1,11 @@
+#!/bin/sh
+# zaio postrm: `apt purge zaio` also forgets the machine's link to Athena.
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+if [ "$1" = "purge" ]; then
+  rm -rf /etc/zaio /var/lib/zaio /var/log/zaio
+fi
+exit 0
