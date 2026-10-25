@@ -78,3 +78,36 @@ export async function publishLabEdit(labId: string, yaml: string): Promise<Publi
     return res;
   });
 }
+
+/** Who can see a lab — set from its page, and kept across re-uploads. */
+export async function setLabVisibility(scenarioId: string, exposure: "ROLLOUT" | "PUBLIC", hidden: boolean): Promise<{ ok: true } | Err> {
+  await requireArchitect();
+  const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { kind: true, type: true } });
+  if (scenario?.kind !== "LAB") return { error: "No such lab." };
+  await prisma.scenario.update({
+    where: { id: scenarioId },
+    // Hidden is a Dojo-only idea, as for SOC scenarios: assessments are always listed to their cohorts.
+    data: { exposure: exposure === "PUBLIC" ? "PUBLIC" : "ROLLOUT", hidden: scenario.type === "DOJO" && hidden },
+  });
+  revalidatePath(`/admin/scenarios/${scenarioId}`);
+  revalidatePath("/admin/scenarios");
+  return { ok: true };
+}
+
+/** Release a lab to exactly these cohorts (adds and removes bindings). */
+export async function setLabCohorts(scenarioId: string, cohortIds: string[]): Promise<{ ok: true } | Err> {
+  const user = await requireArchitect();
+  const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { kind: true } });
+  if (scenario?.kind !== "LAB") return { error: "No such lab." };
+  const wanted = (await prisma.cohort.findMany({ where: { id: { in: cohortIds } }, select: { id: true } })).map((c) => c.id);
+  const current = (await prisma.cohortScenario.findMany({ where: { scenarioId }, select: { cohortId: true } })).map((b) => b.cohortId);
+  const added = wanted.filter((id) => !current.includes(id));
+  const removed = current.filter((id) => !wanted.includes(id));
+  await prisma.$transaction([
+    prisma.cohortScenario.deleteMany({ where: { scenarioId, cohortId: { in: removed } } }),
+    prisma.cohortScenario.createMany({ data: added.map((cohortId) => ({ cohortId, scenarioId, boundById: user.id })), skipDuplicates: true }),
+  ]);
+  revalidatePath(`/admin/scenarios/${scenarioId}`);
+  for (const id of [...added, ...removed]) revalidatePath(`/admin/cohorts/${id}`);
+  return { ok: true };
+}

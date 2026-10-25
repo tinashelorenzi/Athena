@@ -15,6 +15,7 @@ import { Page, TypeTag } from '../settings/parts';
 import { LabGateReport } from './LabGateReport';
 import { LabSessions } from './admin/LabSessions';
 import { RegradeButton } from './admin/RegradeDialog';
+import { LabVisibility } from './admin/LabVisibility';
 
 const { Text, Paragraph } = Typography;
 
@@ -33,7 +34,7 @@ const itemSummary = (it) => {
 /* Instructor view of a LAB scenario: what the lab collects and checks, how its
    reference evidence graded, and its version history. Labs are edited by
    re-uploading the folder (Autobuilder) — each upload is a new version. */
-export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [] }) {
+export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [], visibility }) {
   const lab = definition;
   const flagged = sessions.filter((s) => s.flags.length).length;
   return (
@@ -62,6 +63,7 @@ export function LabOverview({ scenario, labId, slug, definition, gate, assets, v
         </>
       }
     >
+      {visibility && <LabVisibility scenario={scenario} {...visibility} />}
       {!lab ? (
         <Card><Empty description="This lab has no version yet." /></Card>
       ) : (

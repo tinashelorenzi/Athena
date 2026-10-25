@@ -69,7 +69,9 @@ export async function saveLab(report: LabFolderReport, files: FolderFile[], crea
   }
 
   await prisma.$transaction([
-    ...(existing ? [prisma.scenario.update({ where: { id: scenarioId }, data: scenarioData })] : []),
+    // Exposure/hidden come from scenario.json only on the first upload; after that the
+    // lab page owns them, so a new version never re-lists or hides a lab by surprise.
+    ...(existing ? [prisma.scenario.update({ where: { id: scenarioId }, data: { ...scenarioData, exposure: undefined, hidden: undefined } })] : []),
     prisma.labVersion.create({
       data: {
         labId,

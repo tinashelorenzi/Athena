@@ -6,6 +6,7 @@ import { ensureRefToken } from '@/lib/scenarios';
 import { LabOverview } from '@/components/screens/labs/LabOverview';
 import { renderTemplate } from '@/lib/labs/language/template';
 import { listLabSessions } from '@/lib/labs/admin';
+import { getBaseUrl } from '@/lib/url';
 
 /* Scenario detail / editor — architect-only. Edit basics + manage endpoints. */
 export default async function ScenarioDetailPage({ params }) {
@@ -17,6 +18,7 @@ export default async function ScenarioDetailPage({ params }) {
     include: {
       endpoints: { orderBy: { hostname: 'asc' } },
       lab: { include: { versions: { orderBy: { version: 'desc' } } } },
+      cohorts: { select: { cohortId: true } },
     },
   });
   if (!scenario) notFound();
@@ -28,6 +30,10 @@ export default async function ScenarioDetailPage({ params }) {
     const definition = latest?.definition ?? null;
     // Show the brief as a student with the good reference's values would see it.
     const refParams = latest?.gate?.referenceParams ?? null;
+    const [cohorts, baseUrl] = await Promise.all([
+      prisma.cohort.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+      getBaseUrl(),
+    ]);
     return (
       <LabOverview
         scenario={{
@@ -38,6 +44,7 @@ export default async function ScenarioDetailPage({ params }) {
         labId={scenario.lab.id}
         slug={scenario.lab.slug}
         sessions={await listLabSessions(scenario.lab.id)}
+        visibility={{ cohorts, released: scenario.cohorts.map((b) => b.cohortId), studentUrl: `${baseUrl}/learn/${scenario.id}` }}
         definition={definition}
         gate={latest?.gate ?? null}
         assets={latest?.assets ?? []}

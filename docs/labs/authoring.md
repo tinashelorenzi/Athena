@@ -33,7 +33,8 @@ npm run lab:check -- docs/examples/lab-p21-web
 | `kind` | `"LAB"` (required) |
 | `slug` | Lowercase letters, digits, dashes. Students type it (`zaio start p21-web`). Uploading the same slug again adds a **new version**; running sessions keep theirs. |
 | `type` | `DOJO` (practice: results shown) or `ASSESSMENT` (graded; results hidden until you release them) |
-| `title`, `description`, `exposure`, `hidden`, `techniques` | As for SOC scenarios |
+| `title`, `description`, `techniques` | As for SOC scenarios. A new version updates them. |
+| `exposure`, `hidden` | Starting visibility, used on the **first upload only**. After that, set who sees the lab on its page (**Who can see this lab**: exposure, released cohorts, hidden), and new versions keep it. |
 | `brief` | Path to a `.md` file or inline markdown |
 | `lab` | Path to the definition, default `lab/lab.yaml` |
 
