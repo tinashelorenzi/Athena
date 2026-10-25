@@ -54,7 +54,7 @@ machines:                   # the roles a student fills with their enrolled mach
 
 params:                     # per-student values, stored the first time a student opens the lab
   token:    { type: token, length: 6, unique: cohort }
-  sid_base: { type: int, min: 1000000, max: 1990000, step: 10000, unique: cohort }
+  sid_base: { type: int, min: 1000000, max: 99990000, step: 10000, unique: cohort }
 
 lifecycle:                  # optional
   baseline:

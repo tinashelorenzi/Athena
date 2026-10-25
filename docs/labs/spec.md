@@ -433,7 +433,7 @@ machines:
 ```yaml
 params:
   token:    { type: token, length: 6, alphabet: base32, unique: cohort }
-  sid_base: { type: int, min: 1000000, max: 1990000, step: 10000, unique: cohort }
+  sid_base: { type: int, min: 1000000, max: 99990000, step: 10000, unique: cohort }
   zone:     { type: choice, values: [alpha, bravo, charlie, delta] }
 ```
 
