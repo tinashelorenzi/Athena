@@ -3,8 +3,9 @@ import type { CompiledLab } from "./language/types";
 import { ACTIVE_STATUSES } from "./sessions";
 
 /**
- * Labs a user can run: public (non-hidden) labs plus those released to their
- * cohort; instructors see every lab (to test with reference machines).
+ * Labs a user can run: public (non-hidden) labs, those released to their
+ * cohort, and any lab they have a session running in (a hidden lab started from
+ * its link); instructors see every lab (to test with reference machines).
  */
 export type LabListing = {
   scenarioId: string;
@@ -28,6 +29,9 @@ export async function listLabsForUser(userId: string): Promise<LabListing[]> {
           OR: [
             { exposure: "PUBLIC" as const, hidden: false },
             ...(user.cohortId ? [{ cohorts: { some: { cohortId: user.cohortId } } }] : []),
+            // A hidden public lab is started by its slug/link; once it's running it must be
+            // listed too, or `zaio check`/`end` (which find the session here) can't reach it.
+            { lab: { versions: { some: { sessions: { some: { userId, status: { in: [...ACTIVE_STATUSES] } } } } } } },
           ],
         };
   const scenarios = await prisma.scenario.findMany({
