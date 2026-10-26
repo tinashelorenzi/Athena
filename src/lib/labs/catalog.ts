@@ -24,6 +24,7 @@ export async function listLabsForUser(userId: string): Promise<LabListing[]> {
       ? { kind: "LAB" as const }
       : {
           kind: "LAB" as const,
+          lab: { versions: { some: { draft: false } } },
           OR: [
             { exposure: "PUBLIC" as const, hidden: false },
             ...(user.cohortId ? [{ cohorts: { some: { cohortId: user.cohortId } } }] : []),
@@ -34,7 +35,7 @@ export async function listLabsForUser(userId: string): Promise<LabListing[]> {
     orderBy: { title: "asc" },
     select: {
       id: true, title: true, type: true,
-      lab: { select: { slug: true, versions: { orderBy: { version: "desc" }, take: 1, select: { definition: true } } } },
+      lab: { select: { slug: true, versions: { where: user.role === "SUPER_ADMIN" ? {} : { draft: false }, orderBy: { version: "desc" }, take: 1, select: { definition: true } } } },
     },
   });
   const sessions = await prisma.labSession.findMany({

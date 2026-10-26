@@ -47,19 +47,21 @@ export const assetPath = (a: Pick<LabAsset, "sha256" | "file">) => `${AGENT_ASSE
 
 /** The lab behind a scenario, if the user may run it (released to them, or an instructor). */
 export async function loadLabForUser(userId: string, ref: { scenarioId?: string; slug?: string }) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, cohortId: true } });
+  if (!user) throw new LabError("not_found", "No such user.", 404);
   const lab = await prisma.lab.findFirst({
     where: ref.slug ? { slug: ref.slug } : { scenarioId: ref.scenarioId },
     include: {
       scenario: true,
-      versions: { orderBy: { version: "desc" }, take: 1 },
+      // Instructors run the newest version, drafts included (that's how a draft gets its
+      // good reference); students only ever get the newest accepted one.
+      versions: { where: user.role === "SUPER_ADMIN" ? {} : { draft: false }, orderBy: { version: "desc" }, take: 1 },
     },
   });
   if (!lab || lab.scenario.kind !== "LAB") throw new LabError("not_found", "No such lab.", 404);
   const version = lab.versions[0];
   if (!version) throw new LabError("not_found", "This lab has no published version yet.", 404);
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, cohortId: true } });
-  if (!user) throw new LabError("not_found", "No such user.", 404);
   if (user.role !== "SUPER_ADMIN" && lab.scenario.exposure !== "PUBLIC") {
     const bound = user.cohortId
       ? await prisma.cohortScenario.findUnique({ where: { cohortId_scenarioId: { cohortId: user.cohortId, scenarioId: lab.scenarioId } } })

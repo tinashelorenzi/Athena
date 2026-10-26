@@ -51,7 +51,7 @@ async function main() {
   }
   for (const w of report.warnings) console.log(`\n  warning  ${where(w)}: ${w.message}`);
   for (const e of report.errors) console.log(`\n  ERROR    ${where(e)}: ${e.message}`);
-  console.log(report.ok ? "\n  ✔ The lab would be accepted.\n" : `\n  ✘ The lab would be rejected (${report.errors.length} error${report.errors.length === 1 ? "" : "s"}).\n`);
+  console.log(report.ok ? (report.draft ? "\n  ✔ The lab would be accepted as a draft (no good reference yet).\n" : "\n  ✔ The lab would be accepted.\n") : `\n  ✘ The lab would be rejected (${report.errors.length} error${report.errors.length === 1 ? "" : "s"}).\n`);
   process.exit(report.ok ? 0 : 1);
 }
 

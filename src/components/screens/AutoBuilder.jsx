@@ -31,6 +31,7 @@ const LAB_LAYOUT = `my-lab/
     assets/…           # files sent to the machine (pcaps, fixtures)
   reference/
     good.evidence.json     # from the answer-key machine: must score 100%
+                           # (leave out to upload a draft and capture it from a session)
     broken.evidence.json   # optional: must fail…
     broken.expect.json     # …the checks listed here`;
 

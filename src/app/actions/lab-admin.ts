@@ -6,6 +6,7 @@ import { requireArchitect, requireRole } from "@/lib/auth";
 import { applyRegrade, getSessionDetail, previewRegrade, setScoreOverride, type RegradeDiff, type RegradeTarget, type SessionDetail } from "@/lib/labs/admin";
 import { editorSources, publishEdit, runEditor, type EditorRun, type EditorSource, type PublishResult } from "@/lib/labs/editor";
 import { LabError } from "@/lib/labs/sessions";
+import { saveSessionAsReference, type ReferenceKind, type SaveReferenceResult } from "@/lib/labs/reference";
 
 /* Instructor lab tools (docs/labs/spec.md 12–13). Viewing, overriding and
    re-grading need an instructor; editing checks needs an architect. */
@@ -110,4 +111,18 @@ export async function setLabCohorts(scenarioId: string, cohortIds: string[]): Pr
   revalidatePath(`/admin/scenarios/${scenarioId}`);
   for (const id of [...added, ...removed]) revalidatePath(`/admin/cohorts/${id}`);
   return { ok: true };
+}
+
+/** Save a session's evidence as its lab version's good or broken reference. */
+export async function saveLabReference(sessionId: string, kind: ReferenceKind): Promise<SaveReferenceResult | Err> {
+  const user = await requireArchitect();
+  return guard(async () => {
+    const res = await saveSessionAsReference(sessionId, kind === "broken" ? "broken" : "good", user.id);
+    if (res.ok) {
+      const s = await prisma.labSession.findUnique({ where: { id: sessionId }, select: { labVersion: { select: { lab: { select: { scenarioId: true } } } } } });
+      if (s) revalidatePath(`/admin/scenarios/${s.labVersion.lab.scenarioId}`);
+      revalidatePath("/admin/scenarios");
+    }
+    return res;
+  });
 }

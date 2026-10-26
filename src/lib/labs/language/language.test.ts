@@ -237,6 +237,17 @@ test("gate: rejects a lab whose good reference doesn't score full marks", async 
   assert.match(report.errors.map((e) => e.message).join("\n"), /scores 90\/100, not full marks\. Failing: security_headers/);
 });
 
+test("gate: a lab without a good reference is accepted as a draft", async () => {
+  const files = await folderFiles(path.join(process.cwd(), "docs/examples/lab-p21-web"));
+  const report = await checkLabFolder(files.filter((f) => f.rel !== "reference/good.evidence.json"));
+  assert.deepEqual(report.errors, []);
+  assert.ok(report.ok);
+  assert.equal(report.draft, true);
+  assert.equal(report.gate.good, undefined);
+  assert.equal(report.gate.broken!.score, 30);
+  assert.ok(report.warnings.some((w) => w.file === "reference/good.evidence.json" && /draft/.test(w.message)));
+});
+
 test("lockdown: needs a time limit; agent reports become flags", async () => {
   const { lockdownFlags } = await import("./evidence");
   const withLockdown = (extra: string) => compileLab(`zcl: 1

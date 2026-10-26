@@ -82,6 +82,7 @@ export async function saveLab(report: LabFolderReport, files: FolderFile[], crea
         gate: { ...report.gate, warnings: report.warnings, checkedAt: new Date().toISOString() } as object,
         source: report.source ?? null,
         references: (report.references ?? undefined) as object | undefined,
+        draft: Boolean(report.draft),
         createdById,
       },
     }),

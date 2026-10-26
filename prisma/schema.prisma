@@ -543,6 +543,8 @@ model LabVersion {
   /// Reference evidence from the upload: { good?, broken?, brokenExpect? }
   /// (lab/reference/*.json), so the check editor and re-publishing can re-run the gate.
   references  Json?
+  /// No good reference yet: architects can run it (to capture one), students can't.
+  draft       Boolean  @default(false)
   createdById String
   createdAt   DateTime @default(now())
   sessions    LabSession[]

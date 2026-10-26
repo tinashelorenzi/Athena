@@ -96,7 +96,7 @@ export async function runEditor(labId: string, yaml: string, source: EditorSourc
   return { ...out, result, evidence, params };
 }
 
-export type PublishResult = { ok: true; version: number } | { ok: false; errors: (CompileIssue | FolderIssue)[] };
+export type PublishResult = { ok: true; version: number; draft: boolean } | { ok: false; errors: (CompileIssue | FolderIssue)[] };
 
 /** Publish edited lab.yaml as the next version: same assets and references, gate re-run. */
 export async function publishEdit(labId: string, yaml: string, byUserId: string): Promise<PublishResult> {
@@ -105,10 +105,8 @@ export async function publishEdit(labId: string, yaml: string, byUserId: string)
   if (!compiled.ok) return { ok: false, errors: compiled.errors };
   const lab: CompiledLab = compiled.lab;
   const refs = (v.references ?? {}) as NonNullable<References>;
-  if (!refs.good) {
-    return { ok: false, errors: [{ file: "reference/good.evidence.json", message: `Version ${v.version} has no stored good reference, so the edit can't be checked. Re-upload the lab folder instead.` }] };
-  }
-  const gate = runGate(lab, refs);
+  // With no good reference to check against, the edit is published as another draft.
+  const gate = runGate(lab, refs, { reportMissingGood: false });
   if (gate.errors.length) return { ok: false, errors: gate.errors };
 
   const assets = (v.assets as LabAsset[]).filter((a) => lab.assets.includes(assetName(a.file)));
@@ -122,9 +120,10 @@ export async function publishEdit(labId: string, yaml: string, byUserId: string)
       gate: { ...gate.gate, warnings: compiled.warnings.map((w) => ({ file: "lab/lab.yaml", ...w })), checkedAt: new Date().toISOString(), editedFrom: v.version } as object,
       source: yaml,
       references: gate.references as object,
+      draft: !gate.references.good,
       createdById: byUserId,
     },
   });
   await prisma.labAuditEvent.create({ data: { type: "LAB_EDITED", userId: byUserId, detail: { labId, fromVersion: v.version, toVersion: created.version } } });
-  return { ok: true, version: created.version };
+  return { ok: true, version: created.version, draft: created.draft };
 }

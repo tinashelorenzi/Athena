@@ -3,6 +3,7 @@
 A lab is a folder you upload with the Autobuilder (Admin → Scenarios → Auto-build)
 or `npm run import:scenario -- <folder>`. Athena compiles it, grades your
 reference evidence, and only accepts it if the reference scores full marks.
+New to labs? Start with the step-by-step [building-labs.md](./building-labs.md).
 The design is in [spec.md](./spec.md); a complete working example is
 [`docs/examples/lab-p21-web`](../examples/lab-p21-web/).
 
@@ -14,7 +15,7 @@ my-lab/
     lab.yaml           what to collect and how to grade it
     assets/            files sent to the machine (pcaps, fixture files)
   reference/
-    good.evidence.json     evidence from a machine built from your answer key
+    good.evidence.json     evidence from a machine built from your answer key (or capture it: see below)
     broken.evidence.json   optional: evidence from an untouched machine…
     broken.expect.json     …and which checks it must fail
   instructor/          your notes and answer key (ignored by the upload)
@@ -187,6 +188,10 @@ don't carry their lab.yaml — re-upload the folder once to enable the editor.
    { "pass": ["nginx_ok"], "fail": ["server_tokens", "sqli_rule"], "flags": ["CHANGED_BEFORE_START"] }
    ```
 
-Until the agent can save a session's evidence for you (milestone M3), see
-[`instructor/answer-key.md`](../examples/lab-p21-web/instructor/answer-key.md)
-for how the example's reference evidence was collected.
+No good reference yet? Upload without it: the version is a **draft** that
+students can't see or start. Run a session on your answer-key machine, then on
+the lab page open it under **Sessions** → **Save as good reference**. At full
+marks the version goes live. **Save as broken reference** does the same for an
+untouched machine and writes the expectations from what it got. The
+**Reference gate** tab downloads the stored files for your folder. Walkthrough:
+[building-labs.md](./building-labs.md#getting-the-evidence).

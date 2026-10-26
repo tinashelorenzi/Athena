@@ -2,11 +2,11 @@
 import React, { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Alert, App, Badge, Button, Collapse, Descriptions, Drawer, Empty, Flex, Input, InputNumber, Segmented, Select, Skeleton, Space,
+  Alert, App, Badge, Button, Collapse, Descriptions, Drawer, Empty, Flex, Input, InputNumber, Popconfirm, Segmented, Select, Skeleton, Space,
   Switch, Table, Tabs, Tag, Timeline, Tooltip, Typography,
 } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, FlagFilled, MinusCircleOutlined, SearchOutlined } from '@ant-design/icons';
-import { labSessionDetail, overrideLabScore } from '@/app/actions/lab-admin';
+import { CheckCircleFilled, CloseCircleFilled, DownloadOutlined, FlagFilled, MinusCircleOutlined, SafetyCertificateOutlined, SearchOutlined } from '@ant-design/icons';
+import { labSessionDetail, overrideLabScore, saveLabReference } from '@/app/actions/lab-admin';
 import { flagInfo } from './flags';
 
 const { Text, Paragraph } = Typography;
@@ -163,6 +163,7 @@ function SessionDetailView({ d, definition, onChanged }) {
           description={d.flags.map((f) => <div key={f}><Text strong>{f}</Text>: {flagInfo(f, definition)}</div>)}
         />
       )}
+      {d.runs.some((r) => r.status === 'GRADED') && <ReferenceActions d={d} />}
       {d.status === 'ENDED' && <OverrideForm d={d} onChanged={onChanged} />}
       <Tabs
         items={[
@@ -171,6 +172,61 @@ function SessionDetailView({ d, definition, onChanged }) {
           { key: 'timeline', label: 'Timeline', children: <SessionTimeline d={d} /> },
         ]}
       />
+    </Flex>
+  );
+}
+
+/* Use this session as the lab version's reference evidence: how a lab uploaded
+   without reference/good.evidence.json (a draft) gets one from a real machine. */
+function ReferenceActions({ d }) {
+  const { message } = App.useApp();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [errors, setErrors] = useState(null);
+  const hasFinal = d.runs.some((r) => r.final && r.status === 'GRADED');
+
+  const save = (kind) => start(async () => {
+    const res = await saveLabReference(d.id, kind);
+    if (res?.error) { message.error(res.error); return; }
+    if (!res.ok) { setErrors(res.errors); return; }
+    setErrors(null);
+    message.success(kind === 'good'
+      ? `Saved as version ${res.version}'s good reference (${res.score}/${res.maxScore})${res.activated ? '. The version is live: students can now run it.' : ''}`
+      : `Saved as version ${res.version}'s broken reference`);
+    router.refresh();
+  });
+
+  return (
+    <Flex vertical gap={8}>
+      <Flex gap={8} wrap align="center">
+        <Text type="secondary"><SafetyCertificateOutlined /> Reference for v{d.version}{hasFinal ? '' : ' (from a practice check)'}:</Text>
+        <Popconfirm
+          title="Save as the good reference?"
+          description={<>This session&rsquo;s evidence must score full marks on v{d.version}.<br />Use a machine built from your answer key.</>}
+          okText="Save"
+          onConfirm={() => save('good')}
+        >
+          <Button size="small" type="primary" ghost loading={pending}>Save as good reference</Button>
+        </Popconfirm>
+        <Popconfirm
+          title="Save as the broken reference?"
+          description={<>What passes and fails here becomes what an untouched<br />machine must get. Use a VM with nothing done.</>}
+          okText="Save"
+          onConfirm={() => save('broken')}
+        >
+          <Button size="small" loading={pending}>Save as broken reference</Button>
+        </Popconfirm>
+        <Button size="small" icon={<DownloadOutlined />} href={`/admin/labs/sessions/${d.id}/evidence`}>Download evidence</Button>
+      </Flex>
+      {errors && (
+        <Alert
+          type="error"
+          showIcon
+          closable={{ onClose: () => setErrors(null) }}
+          title="Not saved: the gate didn't pass with this evidence"
+          description={errors.map((e, i) => <div key={i}><Text code>{e.file}</Text> {e.message}</div>)}
+        />
+      )}
     </Flex>
   );
 }

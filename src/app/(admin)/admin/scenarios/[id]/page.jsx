@@ -48,7 +48,7 @@ export default async function ScenarioDetailPage({ params }) {
         definition={definition}
         gate={latest?.gate ?? null}
         assets={latest?.assets ?? []}
-        versions={scenario.lab.versions.map((v) => ({ version: v.version, createdAt: v.createdAt.toISOString(), score: v.gate?.good?.score ?? null, maxScore: v.gate?.good?.maxScore ?? null }))}
+        versions={scenario.lab.versions.map((v) => ({ version: v.version, draft: v.draft, createdAt: v.createdAt.toISOString(), score: v.gate?.good?.score ?? null, maxScore: v.gate?.good?.maxScore ?? null }))}
       />
     );
   }

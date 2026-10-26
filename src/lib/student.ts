@@ -48,6 +48,13 @@ export async function getStudentScenarios(userId: string): Promise<StudentScenar
   for (const b of bindings) scenarioMap.set(b.scenario.id, b.scenario);
   for (const s of publicScenarios) if (!scenarioMap.has(s.id)) scenarioMap.set(s.id, s);
 
+  // Labs with only draft versions aren't runnable by students yet.
+  const labIds = [...scenarioMap.values()].filter((s) => s.kind === "LAB").map((s) => s.id);
+  if (labIds.length) {
+    const ready = new Set((await prisma.lab.findMany({ where: { scenarioId: { in: labIds }, versions: { some: { draft: false } } }, select: { scenarioId: true } })).map((l) => l.scenarioId));
+    for (const id of labIds) if (!ready.has(id)) scenarioMap.delete(id);
+  }
+
   const scenarios = [...scenarioMap.values()];
   if (scenarios.length === 0) return [];
   const scenarioIds = scenarios.map((s) => s.id);

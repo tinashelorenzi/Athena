@@ -41,6 +41,8 @@ export type Expectation = { check: string; expected: "pass" | "fail" | "flag"; o
 
 export type LabFolderReport = {
   ok: boolean;
+  /** No good reference: saved as a draft that only architects can run, to capture one. */
+  draft?: boolean;
   errors: FolderIssue[];
   warnings: FolderIssue[];
   meta?: LabMeta;
@@ -156,7 +158,8 @@ export async function checkLabFolder(files: FolderFile[], opts: { maxCohortSize?
   const brokenRel = "reference/broken.evidence.json";
   const refs: GateReferences = {};
   if (!byRel.has(goodRel)) {
-    err(goodRel, "missing: build a machine from your answer key, run a session on it, and save its evidence here. The lab is only accepted when this evidence scores full marks.");
+    report.draft = true;
+    report.warnings.push({ file: goodRel, message: "missing, so this uploads as a draft: students can't see or start it. Run a session on a machine built from your answer key, then open it under Sessions and choose \"Save as good reference\"." });
   } else {
     const raw = await readJson(goodRel);
     if (raw != null) refs.good = raw;

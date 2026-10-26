@@ -272,7 +272,9 @@ async function buildLab(entries: { rel: string; file: File }[], architectId: str
   revalidatePath("/admin/scenarios");
   const good = report.gate.good;
   return {
-    ok: `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}.`,
+    ok: report.draft
+      ? `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version} is a draft: run it on your answer-key machine and save that session as the good reference.`
+      : `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}.`,
     scenarioId: saved.scenarioId,
     lab: { ...summary, version: saved.version },
   };

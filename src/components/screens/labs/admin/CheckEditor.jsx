@@ -75,7 +75,7 @@ export function CheckEditor({ scenarioId, labId, slug, title, initial }) {
         return;
       }
       clearDraft(labId);
-      message.success(`Published version ${res.version}`);
+      message.success(res.draft ? `Published version ${res.version} as a draft (no good reference yet)` : `Published version ${res.version}`);
       router.push(`/admin/scenarios/${scenarioId}`);
     })),
   });

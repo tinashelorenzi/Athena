@@ -178,8 +178,8 @@ export type RegradeDiff = {
 };
 
 async function regradeItems(labId: string, target: RegradeTarget, sessionIds?: string[]) {
-  const latest = await prisma.labVersion.findFirst({ where: { labId }, orderBy: { version: "desc" } });
-  if (!latest) throw new LabError("not_found", "This lab has no versions.", 404);
+  const latest = await prisma.labVersion.findFirst({ where: { labId, draft: false }, orderBy: { version: "desc" } });
+  if (!latest) throw new LabError("not_found", "This lab has no accepted version to re-grade with (only drafts).", 404);
   const sessions = await prisma.labSession.findMany({
     where: { labVersion: { labId }, status: "ENDED", ...(sessionIds?.length ? { id: { in: sessionIds } } : {}) },
     include: {
@@ -273,7 +273,7 @@ const csvCell = (v: unknown) => {
  * latest finished session (`latest`), with a column per check.
  */
 export async function labCsv(labId: string, scope: "latest" | "all"): Promise<string> {
-  const latest = await prisma.labVersion.findFirst({ where: { labId }, orderBy: { version: "desc" } });
+  const latest = await prisma.labVersion.findFirst({ where: { labId, draft: false }, orderBy: { version: "desc" } });
   const checks = ((latest?.definition as unknown as CompiledLab | undefined)?.checks ?? []).filter((c) => !c.flag);
   const sessions = await prisma.labSession.findMany({
     where: { labVersion: { labId }, ...(scope === "latest" ? { status: "ENDED" } : {}) },
