@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * Instructor grading data (server-only). Aggregates submissions across ALL
@@ -16,8 +17,11 @@ export type QueueItem = {
   studentName: string;
   cohortId: string | null;
   cohortName: string;
+  scenarioId: string;
   scenarioTitle: string;
   scenarioType: "DOJO" | "ASSESSMENT";
+  /** LAB scenarios: the lab session this submission came from. */
+  labSessionId: string | null;
   submitted: string;
   status: "SUBMITTED" | "GRADED";
   grade: number | null;
@@ -38,8 +42,10 @@ export type QueueItem = {
 
 type FlagDef = { id?: string; question?: string; answer?: string; points?: number };
 
-export async function getGradingQueue(): Promise<QueueItem[]> {
+export async function getGradingQueue(where?: Prisma.SubmissionWhereInput, take?: number): Promise<QueueItem[]> {
   const subs = await prisma.submission.findMany({
+    where,
+    take,
     orderBy: [{ submittedAt: "desc" }],
     include: {
       student: { select: { name: true, cohort: { select: { id: true, name: true } } } },
@@ -86,8 +92,10 @@ export async function getGradingQueue(): Promise<QueueItem[]> {
       studentName: s.student.name,
       cohortId: s.student.cohort?.id ?? null,
       cohortName: s.student.cohort?.name ?? "—",
+      scenarioId: s.scenarioId,
       scenarioTitle: s.scenario.title,
       scenarioType: s.scenario.type as "DOJO" | "ASSESSMENT",
+      labSessionId: s.labSessionId,
       submitted: s.submittedAt.toISOString(),
       status: s.status,
       grade: s.grade,
@@ -114,4 +122,85 @@ export async function getGradingStats(): Promise<GradingStats> {
     prisma.submission.count({ where: { status: "GRADED", releasedAt: { not: null } } }),
   ]);
   return { needsGrading, held, released, total: needsGrading + held + released };
+}
+
+/*
+ * Grading changes, made as `actorId` (an instructor). Shared by the grading
+ * Server Actions and the MCP server (docs/mcp.md); callers check the role and
+ * revalidate `/admin/cohorts/<cohortId>`.
+ */
+export type GradeChange = { error?: string; ok?: boolean; cohortId?: string | null };
+
+/**
+ * Commit a grade (0–100) for a submission. The grade is *held*, hidden from the
+ * student until it's released; re-grading a released submission keeps it released.
+ */
+export async function gradeSubmissionAs(actorId: string, submissionId: string, grade: number, feedback: string, release = false): Promise<GradeChange> {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, releasedAt: true, committedAt: true, student: { select: { cohortId: true } } },
+  });
+  if (!submission) return { error: "Submission not found." };
+
+  const numeric = Math.round(Number(grade));
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
+    return { error: "Grade must be between 0 and 100." };
+  }
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: {
+      grade: numeric,
+      feedback: String(feedback ?? "").trim() || null,
+      status: "GRADED",
+      gradedById: actorId,
+      gradedAt: new Date(),
+      // Grading locks the submission: commit it if it wasn't already.
+      ...(submission.committedAt ? {} : { committedAt: new Date(), committedById: actorId }),
+      // Release now if asked; otherwise keep whatever release state it had.
+      ...(release ? { releasedAt: new Date() } : {}),
+    },
+  });
+  return { ok: true, cohortId: submission.student.cohortId };
+}
+
+/**
+ * Commit (lock) a submission for grading, or re-open it so the student can
+ * re-do. A released submission can't be re-opened without un-releasing first.
+ */
+export async function setSubmissionCommittedAs(actorId: string, submissionId: string, committed: boolean): Promise<GradeChange> {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, releasedAt: true, student: { select: { cohortId: true } } },
+  });
+  if (!submission) return { error: "Submission not found." };
+  if (!committed && submission.releasedAt) {
+    return { error: "Un-release the grade before re-opening the submission." };
+  }
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: committed
+      ? { committedAt: new Date(), committedById: actorId }
+      : { committedAt: null, committedById: null },
+  });
+  return { ok: true, cohortId: submission.student.cohortId };
+}
+
+/** Release (or re-hide) a committed grade so the student can see it. */
+export async function setGradeReleasedAs(submissionId: string, released: boolean): Promise<GradeChange> {
+  const submission = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    select: { id: true, status: true, grade: true, student: { select: { cohortId: true } } },
+  });
+  if (!submission) return { error: "Submission not found." };
+  if (released && (submission.status !== "GRADED" || submission.grade == null)) {
+    return { error: "Commit a grade before releasing it." };
+  }
+
+  await prisma.submission.update({
+    where: { id: submissionId },
+    data: { releasedAt: released ? new Date() : null },
+  });
+  return { ok: true, cohortId: submission.student.cohortId };
 }

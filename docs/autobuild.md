@@ -13,6 +13,10 @@ A complete, working example lives in
 > with `"kind": "LAB"` in `scenario.json` and a different folder layout — see
 > [labs/authoring.md](./labs/authoring.md).
 
+> **From Claude:** architects can also upload a bundle as a zip through
+> Athena's MCP server (the `autobuild` tool, or `POST /api/mcp/autobuild`). See
+> [mcp.md](./mcp.md).
+
 ## Folder layout
 
 ```

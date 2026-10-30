@@ -1,10 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
+import { gradeSubmissionAs, setGradeReleasedAs, setSubmissionCommittedAs, type GradeChange } from "@/lib/grading";
 
 export type GradeResult = { error?: string; ok?: boolean };
+
+/* Instructor grading. The rules live in src/lib/grading.ts, shared with the
+   MCP server (docs/mcp.md). */
+
+function done(res: GradeChange): GradeResult {
+  if (res.error) return { error: res.error };
+  if (res.cohortId) revalidatePath(`/admin/cohorts/${res.cohortId}`);
+  return { ok: true };
+}
 
 /**
  * Commit a grade for a student's submission (instructor-only). The grade is
@@ -18,35 +27,7 @@ export async function gradeSubmission(
   release = false,
 ): Promise<GradeResult> {
   const admin = await requireRole("SUPER_ADMIN");
-
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    select: { id: true, releasedAt: true, committedAt: true, student: { select: { cohortId: true } } },
-  });
-  if (!submission) return { error: "Submission not found." };
-
-  const numeric = Math.round(Number(grade));
-  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 100) {
-    return { error: "Grade must be between 0 and 100." };
-  }
-
-  await prisma.submission.update({
-    where: { id: submissionId },
-    data: {
-      grade: numeric,
-      feedback: feedback.trim() || null,
-      status: "GRADED",
-      gradedById: admin.id,
-      gradedAt: new Date(),
-      // Grading locks the submission: commit it if it wasn't already.
-      ...(submission.committedAt ? {} : { committedAt: new Date(), committedById: admin.id }),
-      // Release now if asked; otherwise keep whatever release state it had.
-      ...(release ? { releasedAt: new Date() } : {}),
-    },
-  });
-
-  if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);
-  return { ok: true };
+  return done(await gradeSubmissionAs(admin.id, submissionId, grade, feedback, release));
 }
 
 /**
@@ -58,25 +39,7 @@ export async function setSubmissionCommitted(
   committed: boolean,
 ): Promise<GradeResult> {
   const admin = await requireRole("SUPER_ADMIN");
-
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    select: { id: true, releasedAt: true, student: { select: { cohortId: true } } },
-  });
-  if (!submission) return { error: "Submission not found." };
-  if (!committed && submission.releasedAt) {
-    return { error: "Un-release the grade before re-opening the submission." };
-  }
-
-  await prisma.submission.update({
-    where: { id: submissionId },
-    data: committed
-      ? { committedAt: new Date(), committedById: admin.id }
-      : { committedAt: null, committedById: null },
-  });
-
-  if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);
-  return { ok: true };
+  return done(await setSubmissionCommittedAs(admin.id, submissionId, committed));
 }
 
 /** Release (or re-hide) a committed grade so the student can see it. */
@@ -85,21 +48,5 @@ export async function setGradeReleased(
   released: boolean,
 ): Promise<GradeResult> {
   await requireRole("SUPER_ADMIN");
-
-  const submission = await prisma.submission.findUnique({
-    where: { id: submissionId },
-    select: { id: true, status: true, grade: true, student: { select: { cohortId: true } } },
-  });
-  if (!submission) return { error: "Submission not found." };
-  if (released && (submission.status !== "GRADED" || submission.grade == null)) {
-    return { error: "Commit a grade before releasing it." };
-  }
-
-  await prisma.submission.update({
-    where: { id: submissionId },
-    data: { releasedAt: released ? new Date() : null },
-  });
-
-  if (submission.student.cohortId) revalidatePath(`/admin/cohorts/${submission.student.cohortId}`);
-  return { ok: true };
+  return done(await setGradeReleasedAs(submissionId, released));
 }

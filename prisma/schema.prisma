@@ -54,6 +54,7 @@ model User {
   labParams    LabParam[]
   labSessions  LabSession[]
   labScriptLinks LabScriptLink[]
+  apiKeys      ApiKey[]
 
   @@index([cohortId])
   @@map("users")
@@ -385,21 +386,34 @@ enum Exposure {
   PUBLIC
 }
 
-/// An API key for external integrations. Only the SHA-256 hash is stored; the
-/// raw key (prefixed `ath_`) is shown once at creation. `prefix` is the public,
-/// non-secret leading segment used to identify the key in listings.
+/// An API key. Only the SHA-256 hash is stored; the raw key is shown once at
+/// creation. `prefix` is the public, non-secret leading segment used to identify
+/// the key in listings.
+///
+/// INTEGRATION keys (`ath_…`) are platform-wide and authenticate /api/v1/*.
+/// MCP keys (`athmcp_…`) belong to one architect (`userId`) and authenticate
+/// /api/mcp, acting as that user (docs/mcp.md).
 model ApiKey {
-  id          String    @id @default(cuid())
+  id          String     @id @default(cuid())
+  kind        ApiKeyKind @default(INTEGRATION)
   name        String
   prefix      String
-  keyHash     String    @unique
+  keyHash     String     @unique
   createdById String
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastUsedAt  DateTime?
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
 
   @@index([prefix])
+  @@index([userId])
   @@map("api_keys")
+}
+
+enum ApiKeyKind {
+  INTEGRATION
+  MCP
 }
 
 /// An authenticated login session. The browser holds an opaque random token;

@@ -3,7 +3,7 @@ import React, { useActionState } from 'react';
 import { Button, Card, Flex, Input, Tabs } from 'antd';
 import {
   UserOutlined, SafetyCertificateOutlined, MailOutlined, DatabaseOutlined, ApiOutlined, LockOutlined,
-  CheckOutlined, KeyOutlined,
+  CheckOutlined, KeyOutlined, RobotOutlined,
 } from '@ant-design/icons';
 import { updateProfile, changePassword } from '@/app/actions/settings';
 import { SectionHeader, FormStatus, FormLayout, Page } from './settings/parts';
@@ -12,16 +12,19 @@ import { SecuritySection } from './settings/SecuritySection';
 import { MailSection } from './settings/MailSection';
 import { StorageSection } from './settings/StorageSection';
 import { ApiAccessSection } from './settings/ApiAccessSection';
+import { McpSection } from './settings/McpSection';
 
 /* Settings surface with tabbed sections. Account (profile + password) is
-   per-user; Security, Mail, Storage and API Access are platform-wide. */
-export function SettingsScreen({ user, security, mail, storage, apiKeys }) {
+   per-user; Security, Mail, Storage and API Access are platform-wide. MCP
+   (architects only) holds the signed-in architect's own MCP keys. */
+export function SettingsScreen({ user, security, mail, storage, apiKeys, mcp }) {
   const items = [
     { key: 'account', label: 'Account', icon: <UserOutlined />, children: <AccountSection user={user} /> },
     { key: 'security', label: 'Security', icon: <SafetyCertificateOutlined />, children: <SecuritySection security={security} /> },
     { key: 'mail', label: 'Mail', icon: <MailOutlined />, children: <MailSection mail={mail} /> },
     { key: 'storage', label: 'Storage', icon: <DatabaseOutlined />, children: <StorageSection storage={storage} /> },
     { key: 'api', label: 'API Access', icon: <ApiOutlined />, children: <ApiAccessSection apiKeys={apiKeys} /> },
+    ...(mcp ? [{ key: 'mcp', label: 'MCP', icon: <RobotOutlined />, children: <McpSection keys={mcp.keys} url={mcp.url} /> }] : []),
   ];
 
   return (
