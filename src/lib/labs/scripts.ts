@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { getBaseUrl } from "@/lib/url";
 import { renderTemplate } from "./language/template";
 import { briefScriptNames } from "./language/scripts";
+import { LabError, loadLabForUser } from "./sessions";
 
-export { briefScriptNames, normalizeScript, validateScript, SCRIPT_NAME, MAX_SCRIPT_BYTES } from "./language/scripts";
+export { briefScriptNames, normalizeScript, scriptFileNames, validateScript, SCRIPT_NAME, MAX_SCRIPT_BYTES } from "./language/scripts";
 
 /**
  * Lab scripts (docs/labs/scripts.md): shell scripts a brief hands to students
@@ -65,3 +66,29 @@ export async function findScriptLink(code: string) {
     include: { script: { include: { lab: { select: { id: true, scenarioId: true, slug: true } } } } },
   });
 }
+
+/**
+ * A short link plus the lab as its owner may see it, or why it can't be used:
+ * links follow the lab's visibility (loadLabForUser), like the lab page.
+ */
+export async function resolveScriptLink(code: string) {
+  const link = await findScriptLink(code);
+  if (!link) return { ok: false as const, status: 404, message: "this script link doesn't exist; copy the command from your lab brief again" };
+  try {
+    const loaded = await loadLabForUser(link.userId, { scenarioId: link.script.lab.scenarioId });
+    return { ok: true as const, link, loaded };
+  } catch (e) {
+    if (e instanceof LabError) return { ok: false as const, status: e.status === 403 ? 403 : 404, message: "this lab isn't available to you any more" };
+    throw e;
+  }
+}
+
+/**
+ * An error from /r/<code> (or a file under it). The body is shell too, so
+ * piping it to bash (curl without -f) fails loudly instead of running nothing.
+ */
+export const scriptLinkError = (status: number, message: string) =>
+  new Response(`echo ${JSON.stringify(`athena: ${message}`)} >&2\nexit 1\n`, {
+    status,
+    headers: { "Content-Type": "text/x-shellscript; charset=utf-8", "Cache-Control": "no-store" },
+  });

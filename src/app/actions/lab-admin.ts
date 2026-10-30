@@ -7,7 +7,9 @@ import { applyRegrade, getSessionDetail, previewRegrade, setScoreOverride, type 
 import { editorSources, publishEdit, runEditor, type EditorRun, type EditorSource, type PublishResult } from "@/lib/labs/editor";
 import { LabError } from "@/lib/labs/sessions";
 import { saveSessionAsReference, type ReferenceKind, type SaveReferenceResult } from "@/lib/labs/reference";
-import { briefScriptNames, normalizeScript, validateScript } from "@/lib/labs/scripts";
+import { briefScriptNames, normalizeScript, scriptFileNames, validateScript } from "@/lib/labs/scripts";
+import { removeLabFile, saveLabFile } from "@/lib/labs/lab-files";
+import { isStorageConfigured } from "@/lib/settings";
 import type { CompiledLab } from "@/lib/labs/language/types";
 
 /* Instructor lab tools (docs/labs/spec.md 12–13). Viewing, overriding and
@@ -137,13 +139,13 @@ export async function saveLabScript(labId: string, name: string, content: string
   const user = await requireArchitect();
   const lab = await prisma.lab.findUnique({
     where: { id: labId },
-    select: { scenarioId: true, versions: { orderBy: { version: "desc" }, take: 1, select: { definition: true } } },
+    select: { scenarioId: true, versions: { orderBy: { version: "desc" }, take: 1, select: { definition: true } }, files: { select: { name: true } } },
   });
   if (!lab) return { error: "No such lab." };
   name = String(name ?? "").trim().replace(/\.sh$/, "");
   content = normalizeScript(String(content ?? ""));
   const params = (lab.versions[0]?.definition as unknown as CompiledLab | undefined)?.params ?? null;
-  const problems = validateScript(name, content, params);
+  const problems = validateScript(name, content, params, lab.files.map((f) => f.name));
   if (problems.length) return { error: problems.join("; ") };
   if (create && (await prisma.labScript.findUnique({ where: { labId_name: { labId, name } }, select: { id: true } }))) {
     return { error: `This lab already has a script called "${name}". Edit that one, or pick another name.` };
@@ -166,6 +168,37 @@ export async function deleteLabScript(labId: string, name: string): Promise<{ ok
     return { error: `The brief still uses {{script.${name}}}. Take it out of brief.md and re-upload the folder first.` };
   }
   await prisma.labScript.deleteMany({ where: { labId, name } });
+  revalidatePath(`/admin/scenarios/${lab.scenarioId}`);
+  return { ok: true };
+}
+
+/** Upload (or replace) a file the lab's scripts download with {{file.<name>}}. FormData: labId, file. */
+export async function uploadLabFile(formData: FormData): Promise<{ ok: true; name: string } | Err> {
+  const user = await requireArchitect();
+  const labId = String(formData.get("labId") ?? "");
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "No file received." };
+  const lab = await prisma.lab.findUnique({ where: { id: labId }, select: { scenarioId: true } });
+  if (!lab) return { error: "No such lab." };
+  if (!(await isStorageConfigured())) return { error: "Configure object storage (Settings → Storage) before uploading files." };
+  try {
+    const res = await saveLabFile(labId, file.name, new Uint8Array(await file.arrayBuffer()), user.id);
+    if (!res.ok) return { error: res.error };
+    revalidatePath(`/admin/scenarios/${lab.scenarioId}`);
+    return { ok: true, name: res.name };
+  } catch (e) {
+    return { error: `Uploading the file failed: ${e instanceof Error ? e.message : e}` };
+  }
+}
+
+/** Delete a lab file; refused while a script still downloads it. */
+export async function deleteLabFile(labId: string, name: string): Promise<{ ok: true } | Err> {
+  await requireArchitect();
+  const lab = await prisma.lab.findUnique({ where: { id: labId }, select: { scenarioId: true, scripts: { select: { name: true, content: true } } } });
+  if (!lab) return { error: "No such lab." };
+  const users = lab.scripts.filter((s) => scriptFileNames(s.content).includes(name)).map((s) => `${s.name}.sh`);
+  if (users.length) return { error: `${users.join(", ")} still ${users.length === 1 ? "uses" : "use"} {{file.${name}}}. Take it out of ${users.length === 1 ? "that script" : "those scripts"} first.` };
+  await removeLabFile(labId, name);
   revalidatePath(`/admin/scenarios/${lab.scenarioId}`);
   return { ok: true };
 }

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import { requireArchitect } from '@/lib/auth';
 import { ensureRefToken } from '@/lib/scenarios';
 import { LabOverview } from '@/components/screens/labs/LabOverview';
-import { briefScriptNames, renderBriefFor } from '@/lib/labs/scripts';
+import { briefScriptNames, renderBriefFor, scriptFileNames } from '@/lib/labs/scripts';
 import { listLabSessions } from '@/lib/labs/admin';
 import { getBaseUrl } from '@/lib/url';
 
@@ -17,7 +17,7 @@ export default async function ScenarioDetailPage({ params }) {
     where: { id },
     include: {
       endpoints: { orderBy: { hostname: 'asc' } },
-      lab: { include: { versions: { orderBy: { version: 'desc' } }, scripts: { orderBy: { name: 'asc' }, include: { _count: { select: { links: true } } } } } },
+      lab: { include: { versions: { orderBy: { version: 'desc' } }, scripts: { orderBy: { name: 'asc' }, include: { _count: { select: { links: true } } } }, files: { orderBy: { name: 'asc' } } } },
       cohorts: { select: { cohortId: true } },
     },
   });
@@ -52,6 +52,10 @@ export default async function ScenarioDetailPage({ params }) {
         assets={latest?.assets ?? []}
         scripts={scenario.lab.scripts.map((s) => ({ name: s.name, content: s.content, updatedAt: s.updatedAt.toISOString(), links: s._count.links, inBrief: briefScriptNames(scenario.brief).includes(s.name) }))}
         params={Object.keys(definition?.params ?? {})}
+        files={scenario.lab.files.map((f) => ({
+          name: f.name, filename: f.filename, size: f.size, updatedAt: f.updatedAt.toISOString(),
+          usedBy: scenario.lab.scripts.filter((s) => scriptFileNames(s.content).includes(f.name)).map((s) => s.name),
+        }))}
         versions={scenario.lab.versions.map((v) => ({ version: v.version, draft: v.draft, createdAt: v.createdAt.toISOString(), score: v.gate?.good?.score ?? null, maxScore: v.gate?.good?.maxScore ?? null }))}
       />
     );

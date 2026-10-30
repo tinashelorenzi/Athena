@@ -7,7 +7,7 @@ import { gradeLab } from "./grade";
 import { drawParams, validateParamValues } from "./params";
 import { cidrContains, semverGte, referencedNames } from "./cel";
 import { renderTemplate, templateRefs } from "./template";
-import { briefScriptNames, normalizeScript, validateScript } from "./scripts";
+import { MAX_FILE_BYTES, briefScriptNames, labFileName, normalizeScript, scriptFileNames, validateLabFile, validateScript } from "./scripts";
 import { checkLabFolder, type FolderFile } from "../folder";
 import type { Evidence } from "./evidence";
 
@@ -321,4 +321,41 @@ test("scripts: brief shortcodes, validation, folder check", async () => {
   assert.equal(more.scripts.find((x) => x.name === "extra")?.content, "echo hi\n");
   assert.ok(more.warnings.some((w) => w.file === "scripts/extra.sh" && /not used in the brief/.test(w.message)));
   assert.ok(more.warnings.some((w) => w.file === "scripts/README.md" && /ignored/.test(w.message)));
+});
+
+test("script files: {{file.x}} in scripts, scripts/files/ in the folder", async () => {
+  assert.deepEqual(templateRefs("{{file.logs_json}}").map((r) => r.kind), ["file"]);
+  assert.equal(renderTemplate("curl {{file.logs_json}} {{file.nope}}", { file: { logs_json: "https://a.test/r/C/f/logs.json" } }), "curl https://a.test/r/C/f/logs.json {{file.nope}}");
+  assert.equal(labFileName("Portal History.JSON"), "portal_history_json");
+  assert.deepEqual(validateLabFile("logs.json", 10), []);
+  assert.ok(validateLabFile("logs.json", 0).some((p) => /empty/.test(p)));
+  assert.ok(validateLabFile("logs.json", MAX_FILE_BYTES + 1).some((p) => /over/.test(p)));
+  assert.ok(validateLabFile('a"b.json', 3).some((p) => /quotes/.test(p)));
+
+  assert.deepEqual(validateScript("s", "curl {{file.logs_json}}", null, ["logs_json"]), []);
+  assert.ok(validateScript("s", "curl {{file.other}}", null, ["logs_json"]).some((p) => /no file named like that/.test(p)));
+  assert.deepEqual(scriptFileNames("{{file.a}} {{file.b}} {{file.a}} {{param.x}}"), ["a", "b"]);
+  const inYaml = compileLab(LAB.replace("[nginx, -t]", '[cat, "{{file.logs_json}}"]'));
+  assert.ok(!inYaml.ok && inYaml.errors.some((e) => /lab files are for scripts/.test(e.message)));
+
+  const files = await folderFiles(path.join(process.cwd(), "docs/examples/lab-p21-web"));
+  const ok = await checkLabFolder(files);
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.files.map((f) => [f.name, f.filename]), [["portal_history_json", "portal-history.json"]]);
+  assert.match(ok.files[0].sha256, /^[0-9a-f]{64}$/);
+
+  // The script's file must ship in the folder or already be on the lab.
+  const noFile = files.filter((f) => !f.rel.startsWith("scripts/files/"));
+  const missing = await checkLabFolder(noFile);
+  assert.ok(missing.errors.some((e) => e.file === "scripts/setup.sh" && /\{\{file\.portal_history_json\}\}/.test(e.message)));
+  assert.deepEqual((await checkLabFolder(noFile, { existingFiles: async () => ["portal_history_json"] })).errors, []);
+
+  // Clashing names are an error; unused files and the brief using {{file.x}} are reported.
+  const extra = (rel: string, text: string): FolderFile => ({ rel, size: text.length, text: async () => text, bytes: async () => Buffer.from(text) });
+  const clash = await checkLabFolder([...files, extra("scripts/files/portal_history.json", "[]")]);
+  assert.ok(clash.errors.some((e) => /both become \{\{file\.portal_history_json\}\}/.test(e.message)));
+  const unused = await checkLabFolder([...files, extra("scripts/files/spare.csv", "a,b")]);
+  assert.ok(unused.warnings.some((w) => w.file === "scripts/files/spare.csv" && /not used/.test(w.message)));
+  const inBrief = await checkLabFolder(files.map((f) => (f.rel === "brief.md" ? extra("brief.md", "see {{file.portal_history_json}}") : f)));
+  assert.ok(inBrief.errors.some((e) => e.file === "brief.md" && /files are for scripts/.test(e.message)));
 });

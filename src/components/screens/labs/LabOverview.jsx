@@ -35,7 +35,7 @@ const itemSummary = (it) => {
 /* Instructor view of a LAB scenario: what the lab collects and checks, how its
    reference evidence graded, and its version history. Labs are edited by
    re-uploading the folder (Autobuilder) — each upload is a new version. */
-export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [], visibility, scripts = [], params = [] }) {
+export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [], visibility, scripts = [], params = [], files = [] }) {
   const lab = definition;
   const current = versions[0];
   const accepted = versions.find((v) => !v.draft);
@@ -95,7 +95,7 @@ export function LabOverview({ scenario, labId, slug, definition, gate, assets, v
                 { key: 'collect', label: <span><CodeOutlined /> Collection</span>, children: <CollectionView lab={lab} assets={assets} /> },
                 { key: 'gate', label: <span><ExperimentOutlined /> Reference gate</span>, children: <Flex vertical gap={12}><ReferenceDownloads labId={labId} version={current?.version} gate={gate} />{gate ? <LabGateReport report={{ errors: [], warnings: gate.warnings ?? [], gate }} /> : <Empty />}</Flex> },
                 { key: 'brief', label: <span><FileTextOutlined /> Brief</span>, children: <BriefView scenario={scenario} hasRef={Boolean(gate?.referenceParams)} hasScripts={scripts.some((s) => s.inBrief)} /> },
-                { key: 'scripts', label: <span><ThunderboltOutlined /> Scripts{scripts.length ? ` (${scripts.length})` : ''}</span>, children: <LabScripts labId={labId} scripts={scripts} params={params} /> },
+                { key: 'scripts', label: <span><ThunderboltOutlined /> Scripts{scripts.length ? ` (${scripts.length})` : ''}</span>, children: <LabScripts labId={labId} scripts={scripts} params={params} files={files} /> },
                 { key: 'versions', label: <span><HistoryOutlined /> Versions</span>, children: <VersionList versions={versions} /> },
               ]}
             />

@@ -521,8 +521,33 @@ model Lab {
   versions   LabVersion[]
   params     LabParam[]
   scripts    LabScript[]
+  files      LabFile[]
 
   @@map("labs")
+}
+
+/// A file lab scripts download ({{file.<name>}} → a link through the student's
+/// script link), e.g. a JSON log dump too big to inline in a script. Kept on the
+/// lab like scripts; the bytes live in object storage.
+model LabFile {
+  id          String   @id @default(cuid())
+  labId       String
+  lab         Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  /// Placeholder name: the filename lowercased, other characters → _ (logs.json → logs_json).
+  name        String
+  /// Original filename, used in the download URL and Content-Disposition.
+  filename    String
+  size        Int
+  sha256      String
+  contentType String
+  storageKey  String
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([labId, name])
+  @@unique([labId, filename])
+  @@map("lab_files")
 }
 
 /// A shell script students fetch with curl from the brief ({{script.<name>}}).

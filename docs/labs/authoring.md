@@ -12,6 +12,7 @@ my-lab/
   scenario.json        { "kind": "LAB", "slug": "p21-web", "type": "DOJO", "title": …, "brief": "brief.md" }
   brief.md             the student's instructions; may use {{param.token}} and {{script.setup}}
   scripts/setup.sh     optional: a script students run with curl from the brief (scripts.md)
+  scripts/files/       optional: files those scripts download with {{file.<name>}}
   lab/
     lab.yaml           what to collect and how to grade it
     assets/            files sent to the machine (pcaps, fixture files)

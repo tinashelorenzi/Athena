@@ -1,15 +1,17 @@
 import { prisma } from "@/lib/db";
-import { putObject } from "@/lib/storage";
+import { deleteObject, putObject } from "@/lib/storage";
 import { isStorageConfigured } from "@/lib/settings";
 import { newRefToken } from "@/lib/scenarios";
 import type { FolderFile, LabFolderReport } from "./folder";
+import { putLabFile, upsertLabFile, type StoredLabFile } from "./lab-files";
 
 /**
  * Persist a lab folder that passed checkLabFolder (server-only). A new slug
  * creates a LAB scenario + Lab + version 1; an existing slug updates the
  * scenario's details and adds the next immutable LabVersion, so running
  * sessions keep grading against the version they started on. The folder's
- * scripts/*.sh are added or updated on the lab; scripts it doesn't ship are kept.
+ * scripts/*.sh and scripts/files/* are added or updated on the lab; scripts and
+ * files it doesn't ship are kept.
  */
 
 export type SaveLabResult = { ok: true; scenarioId: string; labId: string; version: number; created: boolean } | { ok: false; error: string };
@@ -29,8 +31,8 @@ export async function largestCohortSize(): Promise<number> {
 export async function saveLab(report: LabFolderReport, files: FolderFile[], createdById: string): Promise<SaveLabResult> {
   if (!report.ok || !report.meta || !report.lab) return { ok: false, error: "The lab folder has errors." };
   const { meta, lab } = report;
-  if (report.assets.length && !(await isStorageConfigured())) {
-    return { ok: false, error: "This lab has assets (lab/assets/) — configure object storage (Settings → Storage) first." };
+  if ((report.assets.length || report.files.length) && !(await isStorageConfigured())) {
+    return { ok: false, error: `This lab has ${report.assets.length ? "assets (lab/assets/)" : "script files (scripts/files/)"} — configure object storage (Settings → Storage) first.` };
   }
 
   const existing = await prisma.lab.findUnique({ where: { slug: meta.slug }, include: { scenario: { select: { kind: true } }, versions: { select: { version: true }, orderBy: { version: "desc" }, take: 1 } } });
@@ -64,11 +66,18 @@ export async function saveLab(report: LabFolderReport, files: FolderFile[], crea
   // Upload assets before recording the version, so a version never points at missing files.
   const byRel = new Map(files.map((f) => [f.rel, f]));
   const assets = [];
+  const labFiles: StoredLabFile[] = [];
+  const replaced: string[] = [];
   try {
     for (const a of report.assets) {
       const storageKey = `labs/${labId}/v${version}/assets/${a.file.split("/").pop()}`;
       await putObject(storageKey, Buffer.from(await byRel.get(a.file)!.bytes()), "application/octet-stream");
       assets.push({ ...a, storageKey });
+    }
+    for (const f of report.files) {
+      const put = await putLabFile(labId, f.filename, await byRel.get(f.file)!.bytes());
+      labFiles.push(put.row);
+      if (put.replaces) replaced.push(put.replaces);
     }
   } catch (e) {
     if (!existing) await prisma.scenario.delete({ where: { id: scenarioId } }).catch(() => {});
@@ -100,6 +109,8 @@ export async function saveLab(report: LabFolderReport, files: FolderFile[], crea
         create: { labId, name: sc.name, content: sc.content, updatedById: createdById },
       }),
     ),
+    ...labFiles.map((row) => upsertLabFile(labId, row, createdById)),
   ]);
+  await Promise.all(replaced.map((key) => deleteObject(key)));
   return { ok: true, scenarioId, labId, version, created: !existing };
 }

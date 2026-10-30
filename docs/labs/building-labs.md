@@ -22,7 +22,8 @@ my-lab/                          the folder you drop on the Autobuilder
 ├── scenario.json                REQUIRED  title, slug, type: the "card" for the lab
 ├── brief.md                     REQUIRED  the student's instructions (Markdown)
 ├── scripts/                     optional  shell scripts students run from the brief (see scripts.md)
-│   └── setup.sh
+│   ├── setup.sh
+│   └── files/                   optional  big files those scripts download ({{file.<name>}}), e.g. a JSON log dump
 ├── lab/
 │   ├── lab.yaml                 REQUIRED  what to collect from the VM and how to grade it
 │   └── assets/                  optional  files sent to the VM (pcaps, sample logs, fixtures)

@@ -29,6 +29,8 @@ const LAB_LAYOUT = `my-lab/
   scripts/
     setup.sh           # optional: students run it with the curl command
                        # the brief shows ({{param.x}} filled in per student)
+    files/
+      logs.json        # optional: big files scripts download ({{file.logs_json}})
   lab/
     lab.yaml           # roles, params, collect, parse, checks
     assets/…           # files sent to the machine (pcaps, fixtures)

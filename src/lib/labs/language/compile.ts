@@ -202,6 +202,7 @@ export function compileLab(source: string, opts: CompileOptions = {}): CompileRe
     for (const ref of templateRefs(text)) {
       if (ref.kind === "invalid") err(path, ref.reason);
       else if (ref.kind === "script") err(path, `${ref.raw}: scripts are for the brief (students run them); lab.yaml can't use them`);
+      else if (ref.kind === "file") err(path, `${ref.raw}: lab files are for scripts; lab.yaml sends files with {{asset.<name>}} (lab/assets/)`);
       else if (ref.kind === "param" && !params[ref.name]) err(path, `${ref.raw}: no parameter "${ref.name}"`);
       else if (ref.kind === "machine" && !roles.has(ref.role)) err(path, `${ref.raw}: no role "${ref.role}"`);
       else if (ref.kind === "asset") {

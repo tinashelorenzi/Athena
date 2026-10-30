@@ -40,6 +40,7 @@ async function main() {
     console.log(`  roles: ${Object.keys(l.machines).join(", ")} · params: ${Object.keys(l.params).join(", ") || "none"} · checks: ${l.checks.length} · max score ${l.maxScore}`);
     console.log(`  agent needs: ${l.capabilities.join(", ")} · assets: ${report.assets.map((a) => `${a.file} (${a.size} B)`).join(", ") || "none"}`);
     console.log(`  scripts: ${report.scripts.map((s) => `${s.file} → {{script.${s.name}}}`).join(", ") || "none"}`);
+    if (report.files.length) console.log(`  script files: ${report.files.map((f) => `${f.file} (${f.size} B) → {{file.${f.name}}}`).join(", ")}`);
   }
   for (const name of ["good", "broken"] as const) {
     const run = report.gate[name];

@@ -19,6 +19,7 @@ import {
 import { parseGuide, guideRelPath } from "@/lib/guide";
 import { checkLabFolder, type FolderFile, type LabFolderReport } from "@/lib/labs/folder";
 import { labScriptNames, largestCohortSize, saveLab } from "@/lib/labs/save";
+import { labFileNames } from "@/lib/labs/lab-files";
 
 /** A lab folder's check report, minus the compiled definition (kept server-side). */
 export type LabBuildReport = Omit<LabFolderReport, "lab" | "source" | "references" | "scripts"> & {
@@ -264,7 +265,7 @@ async function buildLab(entries: { rel: string; file: File }[], architectId: str
     text: () => file.text(),
     bytes: async () => new Uint8Array(await file.arrayBuffer()),
   }));
-  const report = await checkLabFolder(files, { maxCohortSize: (await largestCohortSize()) || undefined, existingScripts: labScriptNames });
+  const report = await checkLabFolder(files, { maxCohortSize: (await largestCohortSize()) || undefined, existingScripts: labScriptNames, existingFiles: labFileNames });
   const { lab, source: _source, references: _references, scripts, ...rest } = report;
   void _source;
   void _references;
@@ -284,7 +285,7 @@ async function buildLab(entries: { rel: string; file: File }[], architectId: str
   return {
     ok: report.draft
       ? `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version} is a draft: run it on your answer-key machine and save that session as the good reference.`
-      : `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}${scripts.length ? `, ${scripts.length} script${scripts.length === 1 ? "" : "s"}` : ""}.`,
+      : `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}${scripts.length ? `, ${scripts.length} script${scripts.length === 1 ? "" : "s"}` : ""}${report.files.length ? `, ${report.files.length} file${report.files.length === 1 ? "" : "s"}` : ""}.`,
     scenarioId: saved.scenarioId,
     lab: { ...summary, version: saved.version },
   };
