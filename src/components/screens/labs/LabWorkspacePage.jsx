@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { machineOnline } from '@/lib/labs/machines';
 import { LabError, loadLabForUser, settleUserSessions, ACTIVE_STATUSES } from '@/lib/labs/sessions';
 import { getOrCreateLabParams } from '@/lib/labs/params-store';
-import { renderTemplate } from '@/lib/labs/language/template';
+import { renderBriefFor } from '@/lib/labs/scripts';
 import { buildSessionView, resultsVisible } from '@/lib/labs/views';
 import { LabWorkspace } from './LabWorkspace';
 
@@ -42,6 +42,8 @@ export async function LabWorkspacePage({ user, scenarioId }) {
     missing: definition.capabilities.filter((c) => !m.capabilities.includes(c)),
   }));
 
+  const brief = await renderBriefFor(scenario.brief, lab.id, user.id, params);
+
   const current = sessions.find((s) => ACTIVE_STATUSES.includes(s.status)) ?? sessions[0] ?? null;
   const view = current ? await buildSessionView(current.id) : null;
 
@@ -75,7 +77,7 @@ export async function LabWorkspacePage({ user, scenarioId }) {
       user={{ id: user.id, name: user.name }}
       scenario={{ id: scenario.id, title: scenario.title, type: scenario.type, description: scenario.description, techniques: scenario.techniques }}
       slug={lab.slug}
-      brief={renderTemplate(scenario.brief, { param: params })}
+      brief={brief}
       roles={roles}
       policy={{ timeLimitMinutes: definition.session.timeLimitMinutes, lockdown: Boolean(definition.lifecycle.lockdown), ...definition.session.checks }}
       machines={machines}

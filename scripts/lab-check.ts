@@ -39,6 +39,7 @@ async function main() {
     console.log(`\n  ${report.meta.title}  [${report.meta.slug}, ${report.meta.type.toLowerCase()}]`);
     console.log(`  roles: ${Object.keys(l.machines).join(", ")} · params: ${Object.keys(l.params).join(", ") || "none"} · checks: ${l.checks.length} · max score ${l.maxScore}`);
     console.log(`  agent needs: ${l.capabilities.join(", ")} · assets: ${report.assets.map((a) => `${a.file} (${a.size} B)`).join(", ") || "none"}`);
+    console.log(`  scripts: ${report.scripts.map((s) => `${s.file} → {{script.${s.name}}}`).join(", ") || "none"}`);
   }
   for (const name of ["good", "broken"] as const) {
     const run = report.gate[name];

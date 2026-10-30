@@ -53,6 +53,7 @@ model User {
   machineEnrollCodes MachineEnrollCode[]
   labParams    LabParam[]
   labSessions  LabSession[]
+  labScriptLinks LabScriptLink[]
 
   @@index([cohortId])
   @@map("users")
@@ -519,8 +520,46 @@ model Lab {
   createdAt  DateTime     @default(now())
   versions   LabVersion[]
   params     LabParam[]
+  scripts    LabScript[]
 
   @@map("labs")
+}
+
+/// A shell script students fetch with curl from the brief ({{script.<name>}}).
+/// Kept on the lab, not a version, like the brief: fixing one applies at once.
+model LabScript {
+  id          String          @id @default(cuid())
+  labId       String
+  lab         Lab             @relation(fields: [labId], references: [id], onDelete: Cascade)
+  /// Lowercase letters, digits, - and _ (scripts/<name>.sh in the lab folder).
+  name        String
+  /// Script text; {{param.x}} is filled in with the fetching student's values.
+  content     String          @db.Text
+  updatedById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  links       LabScriptLink[]
+
+  @@unique([labId, name])
+  @@map("lab_scripts")
+}
+
+/// A student's own short link to a lab script (/s/<id>), so the script can be
+/// rendered with their parameters without them signing in from the machine.
+model LabScriptLink {
+  /// The short code in the URL.
+  id            String    @id
+  scriptId      String
+  script        LabScript @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  lastFetchedAt DateTime?
+  fetchCount    Int       @default(0)
+
+  @@unique([scriptId, userId])
+  @@index([userId])
+  @@map("lab_script_links")
 }
 
 /// One immutable upload of a lab. Sessions pin to a version, so re-uploading

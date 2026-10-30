@@ -12,7 +12,7 @@ const where = (i) => `${i.file}${i.line ? `:${i.line}` : ''}`;
    good / broken reference evidence graded (docs/labs/spec.md section 11). */
 export function LabGateReport({ report }) {
   if (!report) return null;
-  const { errors = [], warnings = [], gate = {} } = report;
+  const { errors = [], warnings = [], gate = {}, scripts = [] } = report;
   return (
     <Flex vertical gap={16}>
       {errors.length > 0 && (
@@ -22,6 +22,13 @@ export function LabGateReport({ report }) {
       )}
       {gate.good && <GateRunCard title="Good reference" subtitle="Built from the answer key — must score full marks" run={gate.good} />}
       {gate.broken && <GateRunCard title="Broken reference" subtitle="Nothing done — must fail the expected checks" run={gate.broken} expectations={gate.broken.expectations} />}
+      {scripts.length > 0 && (
+        <Card size="small" title={`${scripts.length} script${scripts.length === 1 ? '' : 's'} for the brief`}>
+          <Flex gap={8} wrap>
+            {scripts.map((s) => <Tag key={s.name} style={{ margin: 0 }}><Text code style={{ fontSize: 12 }}>{`{{script.${s.name}}}`}</Text> {s.file} · {s.size} B</Tag>)}
+          </Flex>
+        </Card>
+      )}
       {warnings.length > 0 && (
         <Collapse
           size="small"

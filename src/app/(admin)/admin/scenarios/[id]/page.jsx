@@ -4,20 +4,20 @@ import { prisma } from '@/lib/db';
 import { requireArchitect } from '@/lib/auth';
 import { ensureRefToken } from '@/lib/scenarios';
 import { LabOverview } from '@/components/screens/labs/LabOverview';
-import { renderTemplate } from '@/lib/labs/language/template';
+import { briefScriptNames, renderBriefFor } from '@/lib/labs/scripts';
 import { listLabSessions } from '@/lib/labs/admin';
 import { getBaseUrl } from '@/lib/url';
 
 /* Scenario detail / editor — architect-only. Edit basics + manage endpoints. */
 export default async function ScenarioDetailPage({ params }) {
-  await requireArchitect();
+  const user = await requireArchitect();
   const { id } = await params;
 
   const scenario = await prisma.scenario.findUnique({
     where: { id },
     include: {
       endpoints: { orderBy: { hostname: 'asc' } },
-      lab: { include: { versions: { orderBy: { version: 'desc' } } } },
+      lab: { include: { versions: { orderBy: { version: 'desc' } }, scripts: { orderBy: { name: 'asc' }, include: { _count: { select: { links: true } } } } } },
       cohorts: { select: { cohortId: true } },
     },
   });
@@ -28,18 +28,20 @@ export default async function ScenarioDetailPage({ params }) {
   if (scenario.kind === 'LAB' && scenario.lab) {
     const [latest] = scenario.lab.versions;
     const definition = latest?.definition ?? null;
-    // Show the brief as a student with the good reference's values would see it.
+    // Show the brief as a student with the good reference's values would see it. Script
+    // links are the instructor's own, so running one on an answer-key VM gets their values.
     const refParams = latest?.gate?.referenceParams ?? null;
-    const [cohorts, baseUrl] = await Promise.all([
+    const [cohorts, baseUrl, brief] = await Promise.all([
       prisma.cohort.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
       getBaseUrl(),
+      renderBriefFor(scenario.brief, scenario.lab.id, user.id, refParams),
     ]);
     return (
       <LabOverview
         scenario={{
           id: scenario.id, title: scenario.title, description: scenario.description, type: scenario.type,
           exposure: scenario.exposure, hidden: scenario.hidden, techniques: scenario.techniques, refToken,
-          brief: refParams ? renderTemplate(scenario.brief, { param: refParams }) : scenario.brief,
+          brief,
         }}
         labId={scenario.lab.id}
         slug={scenario.lab.slug}
@@ -48,6 +50,8 @@ export default async function ScenarioDetailPage({ params }) {
         definition={definition}
         gate={latest?.gate ?? null}
         assets={latest?.assets ?? []}
+        scripts={scenario.lab.scripts.map((s) => ({ name: s.name, content: s.content, updatedAt: s.updatedAt.toISOString(), links: s._count.links, inBrief: briefScriptNames(scenario.brief).includes(s.name) }))}
+        params={Object.keys(definition?.params ?? {})}
         versions={scenario.lab.versions.map((v) => ({ version: v.version, draft: v.draft, createdAt: v.createdAt.toISOString(), score: v.gate?.good?.score ?? null, maxScore: v.gate?.good?.maxScore ?? null }))}
       />
     );

@@ -18,10 +18,15 @@ import {
 } from "@/lib/scenario-schemas";
 import { parseGuide, guideRelPath } from "@/lib/guide";
 import { checkLabFolder, type FolderFile, type LabFolderReport } from "@/lib/labs/folder";
-import { largestCohortSize, saveLab } from "@/lib/labs/save";
+import { labScriptNames, largestCohortSize, saveLab } from "@/lib/labs/save";
 
 /** A lab folder's check report, minus the compiled definition (kept server-side). */
-export type LabBuildReport = Omit<LabFolderReport, "lab" | "source" | "references"> & { maxScore?: number; checkCount?: number; version?: number };
+export type LabBuildReport = Omit<LabFolderReport, "lab" | "source" | "references" | "scripts"> & {
+  maxScore?: number;
+  checkCount?: number;
+  version?: number;
+  scripts: { name: string; file: string; size: number }[];
+};
 
 export type AutoBuildResult = { error?: string; ok?: string; scenarioId?: string; lab?: LabBuildReport };
 
@@ -259,11 +264,16 @@ async function buildLab(entries: { rel: string; file: File }[], architectId: str
     text: () => file.text(),
     bytes: async () => new Uint8Array(await file.arrayBuffer()),
   }));
-  const report = await checkLabFolder(files, { maxCohortSize: (await largestCohortSize()) || undefined });
-  const { lab, source: _source, references: _references, ...rest } = report;
+  const report = await checkLabFolder(files, { maxCohortSize: (await largestCohortSize()) || undefined, existingScripts: labScriptNames });
+  const { lab, source: _source, references: _references, scripts, ...rest } = report;
   void _source;
   void _references;
-  const summary: LabBuildReport = { ...rest, maxScore: lab?.maxScore, checkCount: lab?.checks.length };
+  const summary: LabBuildReport = {
+    ...rest,
+    maxScore: lab?.maxScore,
+    checkCount: lab?.checks.length,
+    scripts: scripts.map(({ name, file, size }) => ({ name, file, size })),
+  };
   if (!report.ok) {
     return { error: `The lab was not accepted: ${report.errors.length} problem${report.errors.length === 1 ? "" : "s"} to fix.`, lab: summary };
   }
@@ -274,7 +284,7 @@ async function buildLab(entries: { rel: string; file: File }[], architectId: str
   return {
     ok: report.draft
       ? `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version} is a draft: run it on your answer-key machine and save that session as the good reference.`
-      : `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}.`,
+      : `${saved.created ? "Created" : "Updated"} lab “${report.meta!.title}” — version ${saved.version}, reference ${good?.score}/${good?.maxScore}${scripts.length ? `, ${scripts.length} script${scripts.length === 1 ? "" : "s"}` : ""}.`,
     scenarioId: saved.scenarioId,
     lab: { ...summary, version: saved.version },
   };

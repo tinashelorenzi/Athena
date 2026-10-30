@@ -6,10 +6,11 @@ import { validateParamValues, type ParamValues } from "./language/params";
 import { templateRefs } from "./language/template";
 import type { CompiledLab } from "./language/types";
 import { normalizeTechniques } from "@/lib/scenario-schemas";
+import { normalizeScript, validateScript } from "./language/scripts";
 
 /**
  * Checks a lab folder (docs/labs/spec.md sections 10–11) without touching the
- * database: manifest, brief, lab.yaml, assets, and the reference-evidence gate.
+ * database: manifest, brief, lab.yaml, assets, scripts, and the reference-evidence gate.
  * Used by the Autobuilder, `npm run import:scenario` and `npm run lab:check`.
  */
 
@@ -30,6 +31,9 @@ export type LabMeta = {
 
 export type LabAsset = { name: string; file: string; size: number; sha256: string };
 
+/** A scripts/<name>.sh file the brief can hand out with {{script.<name>}}. */
+export type LabFolderScript = { name: string; file: string; size: number; content: string };
+
 export type GateRun = {
   score: number;
   maxScore: number;
@@ -49,6 +53,7 @@ export type LabFolderReport = {
   lab?: CompiledLab;
   labFile?: string;
   assets: LabAsset[];
+  scripts: LabFolderScript[];
   /** lab.yaml text and the reference evidence, kept with the version for the check editor. */
   source?: string;
   references?: { good?: Evidence; broken?: Evidence; brokenExpect?: unknown };
@@ -69,8 +74,15 @@ function summarize(g: GradeResult): GateRun {
   };
 }
 
-export async function checkLabFolder(files: FolderFile[], opts: { maxCohortSize?: number } = {}): Promise<LabFolderReport> {
-  const report: LabFolderReport = { ok: false, errors: [], warnings: [], assets: [], gate: {} };
+export async function checkLabFolder(
+  files: FolderFile[],
+  opts: {
+    maxCohortSize?: number;
+    /** Scripts the lab already has on Athena (by slug), which the brief may use without the folder shipping them. */
+    existingScripts?: (slug: string) => Promise<string[]>;
+  } = {},
+): Promise<LabFolderReport> {
+  const report: LabFolderReport = { ok: false, errors: [], warnings: [], assets: [], scripts: [], gate: {} };
   const err = (file: string, message: string, extra: Partial<FolderIssue> = {}) => report.errors.push({ file, message, ...extra });
   const byRel = new Map(files.map((f) => [f.rel, f]));
   const readJson = async (rel: string): Promise<unknown> => {
@@ -136,12 +148,37 @@ export async function checkLabFolder(files: FolderFile[], opts: { maxCohortSize?
   // Only ship assets the lab actually uses.
   report.assets = report.assets.filter((a) => lab.assets.includes(a.name));
 
+  // ── scripts/*.sh ──────────────────────────────────────────────────────────
+  for (const f of files.filter((x) => x.rel.startsWith("scripts/"))) {
+    const base = f.rel.slice("scripts/".length);
+    if (base.includes("/") || !base.endsWith(".sh")) {
+      report.warnings.push({ file: f.rel, message: "ignored: scripts/ holds <name>.sh files only (no sub-folders)" });
+      continue;
+    }
+    const name = base.slice(0, -3);
+    const content = normalizeScript(await f.text());
+    const problems = validateScript(name, content, lab.params);
+    problems.forEach((p) => err(f.rel, p));
+    if (!problems.length) report.scripts.push({ name, file: f.rel, size: f.size, content });
+  }
+
   // Brief placeholders must exist.
+  const briefFile = typeof m.brief === "string" && m.brief.endsWith(".md") ? m.brief : "scenario.json";
+  const onAthena = slug && opts.existingScripts && templateRefs(brief).some((r) => r.kind === "script") ? await opts.existingScripts(slug) : [];
+  const usedScripts = new Set<string>();
   for (const ref of templateRefs(brief)) {
-    const where = typeof m.brief === "string" && m.brief.endsWith(".md") ? m.brief : "scenario.json";
+    const where = briefFile;
     if (ref.kind === "param" && !lab.params[ref.name]) err(where, `${ref.raw}: no parameter "${ref.name}" in ${labFile}`);
     else if (ref.kind === "machine" && !lab.machines[ref.role]) err(where, `${ref.raw}: no role "${ref.role}" in ${labFile}`);
-    else if (ref.kind === "invalid") err(where, ref.reason);
+    else if (ref.kind === "script") {
+      usedScripts.add(ref.name);
+      if (!report.scripts.some((s) => s.name === ref.name) && !onAthena.includes(ref.name)) {
+        err(where, `${ref.raw}: no scripts/${ref.name}.sh in the folder${onAthena.length ? ` (this lab's scripts on Athena: ${onAthena.join(", ")})` : ""}`);
+      }
+    } else if (ref.kind === "invalid") err(where, ref.reason);
+  }
+  for (const s of report.scripts.filter((x) => !usedScripts.has(x.name))) {
+    report.warnings.push({ file: s.file, message: `not used in the brief: add {{script.${s.name}}} where students should run it` });
   }
 
   report.meta = {

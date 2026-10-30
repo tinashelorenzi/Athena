@@ -7,6 +7,8 @@ import { applyRegrade, getSessionDetail, previewRegrade, setScoreOverride, type 
 import { editorSources, publishEdit, runEditor, type EditorRun, type EditorSource, type PublishResult } from "@/lib/labs/editor";
 import { LabError } from "@/lib/labs/sessions";
 import { saveSessionAsReference, type ReferenceKind, type SaveReferenceResult } from "@/lib/labs/reference";
+import { briefScriptNames, normalizeScript, validateScript } from "@/lib/labs/scripts";
+import type { CompiledLab } from "@/lib/labs/language/types";
 
 /* Instructor lab tools (docs/labs/spec.md 12–13). Viewing, overriding and
    re-grading need an instructor; editing checks needs an architect. */
@@ -125,4 +127,45 @@ export async function saveLabReference(sessionId: string, kind: ReferenceKind): 
     }
     return res;
   });
+}
+
+/**
+ * Add or replace a lab script typed or uploaded on the lab page (docs/labs/scripts.md).
+ * `create` refuses to overwrite an existing script of that name.
+ */
+export async function saveLabScript(labId: string, name: string, content: string, create: boolean): Promise<{ ok: true } | Err> {
+  const user = await requireArchitect();
+  const lab = await prisma.lab.findUnique({
+    where: { id: labId },
+    select: { scenarioId: true, versions: { orderBy: { version: "desc" }, take: 1, select: { definition: true } } },
+  });
+  if (!lab) return { error: "No such lab." };
+  name = String(name ?? "").trim().replace(/\.sh$/, "");
+  content = normalizeScript(String(content ?? ""));
+  const params = (lab.versions[0]?.definition as unknown as CompiledLab | undefined)?.params ?? null;
+  const problems = validateScript(name, content, params);
+  if (problems.length) return { error: problems.join("; ") };
+  if (create && (await prisma.labScript.findUnique({ where: { labId_name: { labId, name } }, select: { id: true } }))) {
+    return { error: `This lab already has a script called "${name}". Edit that one, or pick another name.` };
+  }
+  await prisma.labScript.upsert({
+    where: { labId_name: { labId, name } },
+    update: { content, updatedById: user.id },
+    create: { labId, name, content, updatedById: user.id },
+  });
+  revalidatePath(`/admin/scenarios/${lab.scenarioId}`);
+  return { ok: true };
+}
+
+/** Delete a lab script; refused while the brief still hands it out. Students' links stop working. */
+export async function deleteLabScript(labId: string, name: string): Promise<{ ok: true } | Err> {
+  await requireArchitect();
+  const lab = await prisma.lab.findUnique({ where: { id: labId }, select: { scenarioId: true, scenario: { select: { brief: true } } } });
+  if (!lab) return { error: "No such lab." };
+  if (briefScriptNames(lab.scenario.brief).includes(name)) {
+    return { error: `The brief still uses {{script.${name}}}. Take it out of brief.md and re-upload the folder first.` };
+  }
+  await prisma.labScript.deleteMany({ where: { labId, name } });
+  revalidatePath(`/admin/scenarios/${lab.scenarioId}`);
+  return { ok: true };
 }

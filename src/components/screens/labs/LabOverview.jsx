@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   CloudServerOutlined, CodeOutlined, ExperimentOutlined, EyeInvisibleOutlined, FileTextOutlined, HistoryOutlined,
-  SafetyCertificateOutlined, UploadOutlined, EditOutlined, DownloadOutlined, TeamOutlined,
+  SafetyCertificateOutlined, UploadOutlined, EditOutlined, DownloadOutlined, TeamOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Markdown } from '@/components/Markdown';
 import { StackList } from '@/components/ds/StackList';
@@ -16,6 +16,7 @@ import { LabGateReport } from './LabGateReport';
 import { LabSessions } from './admin/LabSessions';
 import { RegradeButton } from './admin/RegradeDialog';
 import { LabVisibility } from './admin/LabVisibility';
+import { LabScripts } from './admin/LabScripts';
 
 const { Text, Paragraph } = Typography;
 
@@ -34,7 +35,7 @@ const itemSummary = (it) => {
 /* Instructor view of a LAB scenario: what the lab collects and checks, how its
    reference evidence graded, and its version history. Labs are edited by
    re-uploading the folder (Autobuilder) — each upload is a new version. */
-export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [], visibility }) {
+export function LabOverview({ scenario, labId, slug, definition, gate, assets, versions, sessions = [], visibility, scripts = [], params = [] }) {
   const lab = definition;
   const current = versions[0];
   const accepted = versions.find((v) => !v.draft);
@@ -93,7 +94,8 @@ export function LabOverview({ scenario, labId, slug, definition, gate, assets, v
                 { key: 'checks', label: <span><SafetyCertificateOutlined /> Checks</span>, children: <ChecksTable lab={lab} /> },
                 { key: 'collect', label: <span><CodeOutlined /> Collection</span>, children: <CollectionView lab={lab} assets={assets} /> },
                 { key: 'gate', label: <span><ExperimentOutlined /> Reference gate</span>, children: <Flex vertical gap={12}><ReferenceDownloads labId={labId} version={current?.version} gate={gate} />{gate ? <LabGateReport report={{ errors: [], warnings: gate.warnings ?? [], gate }} /> : <Empty />}</Flex> },
-                { key: 'brief', label: <span><FileTextOutlined /> Brief</span>, children: <BriefView scenario={scenario} hasRef={Boolean(gate?.referenceParams)} /> },
+                { key: 'brief', label: <span><FileTextOutlined /> Brief</span>, children: <BriefView scenario={scenario} hasRef={Boolean(gate?.referenceParams)} hasScripts={scripts.some((s) => s.inBrief)} /> },
+                { key: 'scripts', label: <span><ThunderboltOutlined /> Scripts{scripts.length ? ` (${scripts.length})` : ''}</span>, children: <LabScripts labId={labId} scripts={scripts} params={params} /> },
                 { key: 'versions', label: <span><HistoryOutlined /> Versions</span>, children: <VersionList versions={versions} /> },
               ]}
             />
@@ -248,12 +250,13 @@ function CollectionView({ lab, assets }) {
   );
 }
 
-function BriefView({ scenario, hasRef }) {
+function BriefView({ scenario, hasRef, hasScripts }) {
   return (
     <Flex vertical gap={12}>
       {scenario.description && <Paragraph type="secondary" style={{ margin: 0 }}>{scenario.description}</Paragraph>}
       {scenario.techniques?.length > 0 && <TechniqueTags ids={scenario.techniques} />}
       {hasRef && <Alert type="info" showIcon title="Placeholders are filled with the reference machine's values; each student sees their own." />}
+      {hasScripts && <Alert type="info" showIcon title="Script commands here are your own links: running one gets your values. Each student sees their own link." />}
       <Card size="small"><Markdown>{scenario.brief || '_No brief._'}</Markdown></Card>
     </Flex>
   );

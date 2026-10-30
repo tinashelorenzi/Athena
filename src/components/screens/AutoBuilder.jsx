@@ -25,7 +25,10 @@ const LAYOUT = `my-scenario/
 
 const LAB_LAYOUT = `my-lab/
   scenario.json        # { "kind": "LAB", "slug": "p21-web", ... }
-  brief.md             # may use {{param.token}}
+  brief.md             # may use {{param.token}} and {{script.setup}}
+  scripts/
+    setup.sh           # optional: students run it with the curl command
+                       # the brief shows ({{param.x}} filled in per student)
   lab/
     lab.yaml           # roles, params, collect, parse, checks
     assets/…           # files sent to the machine (pcaps, fixtures)

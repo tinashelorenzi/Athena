@@ -8,10 +8,17 @@ import type { FolderFile, LabFolderReport } from "./folder";
  * Persist a lab folder that passed checkLabFolder (server-only). A new slug
  * creates a LAB scenario + Lab + version 1; an existing slug updates the
  * scenario's details and adds the next immutable LabVersion, so running
- * sessions keep grading against the version they started on.
+ * sessions keep grading against the version they started on. The folder's
+ * scripts/*.sh are added or updated on the lab; scripts it doesn't ship are kept.
  */
 
 export type SaveLabResult = { ok: true; scenarioId: string; labId: string; version: number; created: boolean } | { ok: false; error: string };
+
+/** The names of a lab's scripts on Athena, for checkLabFolder's `existingScripts`. */
+export async function labScriptNames(slug: string): Promise<string[]> {
+  const rows = await prisma.labScript.findMany({ where: { lab: { slug } }, select: { name: true }, orderBy: { name: "asc" } });
+  return rows.map((r) => r.name);
+}
 
 /** Largest cohort, for the compiler's `unique: cohort` space check. */
 export async function largestCohortSize(): Promise<number> {
@@ -86,6 +93,13 @@ export async function saveLab(report: LabFolderReport, files: FolderFile[], crea
         createdById,
       },
     }),
+    ...report.scripts.map((sc) =>
+      prisma.labScript.upsert({
+        where: { labId_name: { labId, name: sc.name } },
+        update: { content: sc.content, updatedById: createdById },
+        create: { labId, name: sc.name, content: sc.content, updatedById: createdById },
+      }),
+    ),
   ]);
   return { ok: true, scenarioId, labId, version, created: !existing };
 }

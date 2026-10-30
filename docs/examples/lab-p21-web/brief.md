@@ -9,6 +9,14 @@ These are yours alone — your work is checked against them.
 - **Node tag:** `{{param.token}}`
 - **Snort SIDs:** the 10 000 SIDs starting at `{{param.sid_base}}`
 
+## Set up your server
+
+On a fresh Ubuntu 22.04 or 24.04 VM, run this once. It installs nginx and Snort and saves your values in `/root/p21-values.txt`:
+
+```bash
+{{script.setup}}
+```
+
 ## Tasks
 
 1. Make sure nginx passes `nginx -t` and is running.

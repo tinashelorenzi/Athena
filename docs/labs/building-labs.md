@@ -21,6 +21,8 @@ Athena.
 my-lab/                          the folder you drop on the Autobuilder
 ├── scenario.json                REQUIRED  title, slug, type: the "card" for the lab
 ├── brief.md                     REQUIRED  the student's instructions (Markdown)
+├── scripts/                     optional  shell scripts students run from the brief (see scripts.md)
+│   └── setup.sh
 ├── lab/
 │   ├── lab.yaml                 REQUIRED  what to collect from the VM and how to grade it
 │   └── assets/                  optional  files sent to the VM (pcaps, sample logs, fixtures)
@@ -86,7 +88,13 @@ Harden the SSH server on your VM.
 When you're done, click **Check**.
 ```
 
-Only `{{param.<name>}}` placeholders work in the brief.
+Two kinds of placeholder work in the brief:
+
+- `{{param.<name>}}`: the student's value of a parameter.
+- `{{script.<name>}}`: a ready-to-copy `curl -fsSL <link> | sudo bash` command
+  for `scripts/<name>.sh`. Each student gets their own link, and the script is
+  filled with their values. `{{script.<name>.url}}` gives just the link. See
+  [scripts.md](./scripts.md).
 
 ## 3. `lab/lab.yaml`: collect, parse, check
 
@@ -342,6 +350,7 @@ Students open the lab, choose their linked VM for each role, and click
 
 - [ ] `scenario.json` has `"kind": "LAB"` and a **new** slug.
 - [ ] Every `{{param.x}}` in the brief is defined under `params`.
+- [ ] Every `{{script.x}}` in the brief has a `scripts/x.sh`, and the brief has students run it before they start the lab ([scripts.md](./scripts.md)).
 - [ ] Every `unique: cohort` param has at least 4× your largest cohort in values.
 - [ ] At least one check proves the student's own token is in their work.
 - [ ] Hints don't give answers and contain no `{{…}}`.

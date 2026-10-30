@@ -7,6 +7,7 @@ import { gradeLab } from "./grade";
 import { drawParams, validateParamValues } from "./params";
 import { cidrContains, semverGte, referencedNames } from "./cel";
 import { renderTemplate, templateRefs } from "./template";
+import { briefScriptNames, normalizeScript, validateScript } from "./scripts";
 import { checkLabFolder, type FolderFile } from "../folder";
 import type { Evidence } from "./evidence";
 
@@ -276,4 +277,48 @@ checks:
   assert.deepEqual(lockdownFlags(ev({ ...held, units: [{ ...held.units[0], loadState: "loaded", activeState: "active" }] })), ["LOCKDOWN_TAMPERED"]);
   assert.deepEqual(lockdownFlags(ev({ ...held, journal: false })), ["LOCKDOWN_TAMPERED"]);
   assert.deepEqual(lockdownFlags({ format: 1, roles: { web: { items: {} } } }), [], "no report (e.g. not a lockdown lab) → no flags");
+});
+
+test("scripts: brief shortcodes, validation, folder check", async () => {
+  const refs = templateRefs("{{script.setup}} {{ script.setup.url }} {{script.x.y}}");
+  assert.deepEqual(refs.map((r) => (r.kind === "script" ? `${r.name}:${r.form}` : r.kind)), ["setup:command", "setup:url", "invalid"]);
+  assert.equal(
+    renderTemplate("run `{{script.setup}}` or fetch {{script.setup.url}}; {{script.gone}}", { script: { setup: "https://a.test/r/Abc" } }),
+    "run `curl -fsSL https://a.test/r/Abc | sudo bash` or fetch https://a.test/r/Abc; {{script.gone}}",
+  );
+  assert.deepEqual(briefScriptNames("{{script.a}} {{script.b.url}} {{script.a}} {{param.token}}"), ["a", "b"]);
+  assert.equal(normalizeScript("a\r\nb\rc"), "a\nb\nc");
+
+  const compiled = compileLab(LAB);
+  const params = compiled.ok ? compiled.lab.params : null;
+  assert.deepEqual(validateScript("setup", "echo {{param.token}}", params), []);
+  assert.ok(validateScript("Set Up", "echo", params).some((p) => /lowercase/.test(p)));
+  assert.ok(validateScript("setup", "  ", params).some((p) => /empty/.test(p)));
+  assert.ok(validateScript("setup", "echo {{param.nope}}", params).some((p) => /no parameter "nope"/.test(p)));
+  assert.ok(validateScript("setup", "echo {{session.nonce}}", params).some((p) => /only use \{\{param/.test(p)));
+
+  // lab.yaml can't use scripts.
+  const inYaml = compileLab(LAB.replace("[nginx, -t]", '[nginx, "{{script.setup}}"]'));
+  assert.ok(!inYaml.ok && inYaml.errors.some((e) => /scripts are for the brief/.test(e.message)));
+
+  // The example lab ships scripts/setup.sh and uses it in its brief.
+  const files = await folderFiles(path.join(process.cwd(), "docs/examples/lab-p21-web"));
+  const ok = await checkLabFolder(files);
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.scripts.map((x) => x.name), ["setup"]);
+
+  // A brief naming a script the folder lacks is an error, unless the lab already has it on Athena.
+  const noScript = files.filter((f) => f.rel !== "scripts/setup.sh");
+  const missing = await checkLabFolder(noScript);
+  assert.ok(missing.errors.some((e) => e.file === "brief.md" && /no scripts\/setup\.sh/.test(e.message)));
+  const onAthena = await checkLabFolder(noScript, { existingScripts: async () => ["setup"] });
+  assert.deepEqual(onAthena.errors, []);
+
+  // An unused script is a warning; non-.sh files in scripts/ are ignored with a warning.
+  const extra = (rel: string, text: string): FolderFile => ({ rel, size: text.length, text: async () => text, bytes: async () => Buffer.from(text) });
+  const more = await checkLabFolder([...files, extra("scripts/extra.sh", "echo hi\r\n"), extra("scripts/README.md", "notes")]);
+  assert.deepEqual(more.errors, []);
+  assert.equal(more.scripts.find((x) => x.name === "extra")?.content, "echo hi\n");
+  assert.ok(more.warnings.some((w) => w.file === "scripts/extra.sh" && /not used in the brief/.test(w.message)));
+  assert.ok(more.warnings.some((w) => w.file === "scripts/README.md" && /ignored/.test(w.message)));
 });
