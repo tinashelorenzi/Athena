@@ -2,6 +2,7 @@ import { LineCounter, parseDocument } from "yaml";
 import { PARSERS } from "./parsers";
 import { RESERVED_NAMES, checkExpression, makeEnv, referencedNames } from "./cel";
 import { templateRefs } from "./template";
+import { ROLE_OSES } from "../os";
 import {
   ZCL_VERSION,
   type Assertion, type Check, type CollectStep, type CompileIssue, type CompileResult, type CompiledLab,
@@ -122,15 +123,15 @@ export function compileLab(source: string, opts: CompileOptions = {}): CompileRe
       const m = isObj(spec) ? spec : spec == null ? {} : null;
       if (!m) { err(p, "a role must be a mapping"); continue; }
       unknownKeys(m, ["os", "versions", "packages"], p);
-      const os = m.os ?? "ubuntu";
-      if (os !== "ubuntu") err([...p, "os"], "only ubuntu machines are supported");
+      const os = String(m.os ?? "ubuntu");
+      if (!(ROLE_OSES as readonly string[]).includes(os)) err([...p, "os"], `os must be ${ROLE_OSES.join(", ")}`);
       const strList = (v: unknown, key: string): string[] => {
         if (v === undefined) return [];
         if (Array.isArray(v) && v.every((x) => typeof x === "string" || typeof x === "number")) return v.map(String);
         err([...p, key], `${key} must be a list`);
         return [];
       };
-      machines[role] = { os: "ubuntu", versions: strList(m.versions, "versions"), packages: strList(m.packages, "packages") };
+      machines[role] = { os, versions: strList(m.versions, "versions"), packages: strList(m.packages, "packages") };
     }
   }
   const roles = new Set(Object.keys(machines));

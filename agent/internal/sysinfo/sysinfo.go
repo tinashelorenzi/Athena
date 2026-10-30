@@ -70,7 +70,17 @@ func ParseOSRelease(content string) map[string]string {
 	return out
 }
 
-// Supported reports whether this OS is one the labs are built for.
+// SupportedOS describes the systems labs are built for, for messages.
+const SupportedOS = "Ubuntu 22.04/24.04 or Kali Linux"
+
+// Supported reports whether this OS is one the labs are built for: Ubuntu
+// 22.04 or 24.04, or Kali Linux (rolling, so any release).
 func (i Info) Supported() bool {
-	return i.OS == "ubuntu" && (i.OSVersion == "22.04" || i.OSVersion == "24.04")
+	switch i.OS {
+	case "ubuntu":
+		return i.OSVersion == "22.04" || i.OSVersion == "24.04"
+	case "kali":
+		return true
+	}
+	return false
 }

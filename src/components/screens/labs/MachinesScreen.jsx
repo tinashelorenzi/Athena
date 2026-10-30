@@ -51,7 +51,10 @@ export function MachinesScreen({ machines, email }) {
       <Card title={<Flex gap={8} align="center"><PlusOutlined />Add a machine</Flex>}>
         <ol style={{ margin: 0, paddingInlineStart: 20, listStyle: 'decimal', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <li>
-            <Text>Install <Text strong>Ubuntu Server 22.04 or 24.04</Text> in VirtualBox (or UTM on a Mac), with NAT networking so it can reach Athena.</Text>
+            <Text>
+              Install <Text strong>Ubuntu Server 22.04 or 24.04</Text>, or use your <Text strong>Kali Linux</Text> machine, in VirtualBox (or UTM on a Mac),
+              with networking that can reach Athena. Each lab says which it needs.
+            </Text>
           </li>
           <li>
             <Flex vertical gap={6} align="flex-start">

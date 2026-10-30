@@ -160,6 +160,6 @@ export function gradeLab(lab: CompiledLab, evidence: Evidence, ctx: GradeContext
 
 function machineContext(evidence: Evidence): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(evidence.roles ?? {}).map(([role, r]) => [role, { hostname: r.machine?.hostname ?? "", osVersion: r.machine?.osVersion ?? "" }]),
+    Object.entries(evidence.roles ?? {}).map(([role, r]) => [role, { hostname: r.machine?.hostname ?? "", os: r.machine?.os ?? "", osVersion: r.machine?.osVersion ?? "" }]),
   );
 }

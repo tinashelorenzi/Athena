@@ -33,7 +33,7 @@ func runSetup(args []string) error {
 	force := fs.Bool("force", false, "re-enrol without asking if already enrolled")
 	noHostname := fs.Bool("no-hostname", false, "don't change the hostname")
 	noService := fs.Bool("no-service", false, "don't install/enable the systemd service")
-	anyOS := fs.Bool("any-os", false, "allow an OS other than Ubuntu 22.04/24.04")
+	anyOS := fs.Bool("any-os", false, "allow an OS other than "+sysinfo.SupportedOS)
 	_ = fs.Parse(args)
 
 	if os.Geteuid() != 0 {
@@ -50,7 +50,7 @@ func runSetup(args []string) error {
 
 	info := sysinfo.Collect("")
 	if !info.Supported() && !*anyOS {
-		return fmt.Errorf("labs need Ubuntu 22.04 or 24.04 (found %q) — use --any-os to continue anyway", strings.TrimSpace(info.OSPretty))
+		return fmt.Errorf("labs need %s (found %q) — use --any-os to continue anyway", sysinfo.SupportedOS, strings.TrimSpace(info.OSPretty))
 	}
 	if len(info.MachineID) != 32 {
 		return errors.New("/etc/machine-id is missing or malformed — run `systemd-machine-id-setup` and try again")

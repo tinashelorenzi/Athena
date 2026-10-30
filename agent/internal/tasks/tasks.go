@@ -160,7 +160,7 @@ func (r *Runner) collect(ctx context.Context, b *bundle.Bundle) (map[string]any,
 		}
 	}
 	info := sysinfo.Collect("")
-	out := map[string]any{"ok": true, "machine": map[string]string{"hostname": info.Hostname, "osVersion": info.OSVersion}, "items": items}
+	out := map[string]any{"ok": true, "machine": map[string]string{"hostname": info.Hostname, "os": info.OS, "osVersion": info.OSVersion}, "items": items}
 	if b.Lockdown != nil {
 		out["lockdown"] = r.lockdownStatus(b.SessionID, st)
 	}

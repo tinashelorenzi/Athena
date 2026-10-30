@@ -37,6 +37,7 @@ export async function LabWorkspacePage({ user, scenarioId }) {
     id: m.id,
     label: m.label,
     hostname: m.hostname,
+    os: m.os,
     osVersion: m.osVersion,
     online: machineOnline(m),
     missing: definition.capabilities.filter((c) => !m.capabilities.includes(c)),
@@ -48,7 +49,7 @@ export async function LabWorkspacePage({ user, scenarioId }) {
   const view = current ? await buildSessionView(current.id) : null;
 
   // Default role → machine: what the last session used, else each role's first free machine.
-  const roles = Object.entries(definition.machines).map(([role, m]) => ({ role, versions: m.versions, packages: m.packages }));
+  const roles = Object.entries(definition.machines).map(([role, m]) => ({ role, os: m.os, versions: m.versions, packages: m.packages }));
   const defaults = {};
   const last = sessions[0];
   for (const { role } of roles) {

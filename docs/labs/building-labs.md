@@ -7,7 +7,8 @@ working lab to copy from is [`docs/examples/lab-p21-web`](../examples/lab-p21-we
 
 ## How a lab works, in one paragraph
 
-A lab is a practical on the student's own Ubuntu VM. The student links the VM
+A lab is a practical on the student's own Ubuntu VM, or their Kali Linux
+machine ([kali.md](./kali.md)). The student links the VM
 to Athena (My machines → `curl … | sudo bash`), opens the lab, and clicks
 **Start**. Athena sends the agent (`zaio`) a signed list of things to collect:
 files, command output, service states. Athena turns what comes back into

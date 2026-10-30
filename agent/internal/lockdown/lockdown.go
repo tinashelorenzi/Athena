@@ -19,7 +19,8 @@ import (
 )
 
 // SSHUnits are the units that can accept SSH logins. Ubuntu 24.04 starts sshd
-// through ssh.socket; 22.04 runs ssh.service directly. Both are handled.
+// through ssh.socket; 22.04 and Kali run ssh.service directly (Kali ships it
+// disabled). Both are handled, and a unit that doesn't exist is skipped.
 var SSHUnits = []string{"ssh.socket", "ssh.service"}
 
 // Systemd is the slice of systemctl the lockdown needs (faked in tests).

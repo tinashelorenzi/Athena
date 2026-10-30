@@ -38,6 +38,12 @@ func TestCollectFromRoot(t *testing.T) {
 	if !info.Supported() {
 		t.Errorf("ubuntu 22.04 should be supported")
 	}
+	if !(Info{OS: "kali", OSVersion: "2025.3"}).Supported() {
+		t.Errorf("kali should be supported")
+	}
+	if (Info{OS: "ubuntu", OSVersion: "20.04"}).Supported() {
+		t.Errorf("ubuntu 20.04 should not be supported")
+	}
 	if (Info{OS: "debian", OSVersion: "12"}).Supported() {
 		t.Errorf("debian should not be supported")
 	}

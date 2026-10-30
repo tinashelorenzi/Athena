@@ -9,6 +9,7 @@ import {
   SafetyCertificateOutlined, UploadOutlined, EditOutlined, DownloadOutlined, TeamOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Markdown } from '@/components/Markdown';
+import { osName } from '@/lib/labs/os';
 import { StackList } from '@/components/ds/StackList';
 import { TechniqueTags } from '@/components/attack/TechniqueTags';
 import { Page, TypeTag } from '../settings/parts';
@@ -199,7 +200,7 @@ function CollectionView({ lab, assets }) {
           {
             key: 'machines', label: 'Machines',
             children: Object.entries(lab.machines).map(([role, m]) => (
-              <div key={role}><Text strong>{role}</Text> — {m.os} {m.versions.join(' / ') || 'any version'}{m.packages.length ? ` · needs ${m.packages.join(', ')}` : ''}</div>
+              <div key={role}><Text strong>{role}</Text> — {osName(m.os)} {m.versions.join(' / ') || 'any version'}{m.packages.length ? ` · needs ${m.packages.join(', ')}` : ''}</div>
             )),
           },
           {

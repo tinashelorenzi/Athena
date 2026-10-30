@@ -13,7 +13,7 @@ import type { CompiledLab } from "./types";
 export type ItemResult = { ok: boolean; error?: string; message?: string; [field: string]: unknown };
 
 export type RoleEvidence = {
-  machine?: { hostname?: string; osVersion?: string };
+  machine?: { hostname?: string; os?: string; osVersion?: string };
   items: Record<string, ItemResult>;
   /** From the session baseline: path → sha256 at session start. */
   baseline?: { files?: Record<string, string> };

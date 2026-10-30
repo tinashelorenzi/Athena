@@ -9,6 +9,7 @@ import { renderTemplate, type TemplateValues } from "./language/template";
 import type { CompiledLab, GatherEntry, GatherItem } from "./language/types";
 import { getOrCreateLabParams } from "./params-store";
 import { notifyMachine } from "./task-events";
+import { roleMismatch } from "./os";
 
 /**
  * Lab sessions (docs/labs/spec.md section 8): start (baseline on every
@@ -203,9 +204,8 @@ export async function startSession(input: StartInput): Promise<LabSession> {
     const m = await prisma.machine.findFirst({ where: { id, userId: input.userId, status: "ACTIVE" } });
     if (!m) throw new LabError("machine_unavailable", `The machine chosen for "${role}" isn't one of your linked machines.`);
     const spec = definition.machines[role];
-    if (spec.versions.length && !spec.versions.includes(m.osVersion)) {
-      throw new LabError("os_unsupported", `"${role}" needs Ubuntu ${spec.versions.join(" or ")}; ${m.label} runs ${m.osVersion}.`);
-    }
+    const mismatch = roleMismatch(role, spec, m);
+    if (mismatch) throw new LabError("os_unsupported", mismatch);
     const missing = definition.capabilities.filter((c) => !m.capabilities.includes(c));
     if (missing.length) {
       throw new LabError("upgrade_required", `${m.label}'s agent (${m.agentVersion}) can't do ${missing.join(", ")} yet. Update it: curl -fsSL <athena>/i | sudo bash`, 409);
@@ -370,7 +370,9 @@ export async function submitTaskResult(machine: Machine, taskId: string, body: u
   if (task.kind === "COLLECT" && task.checkRunId && task.role && !failed) {
     // Merge this role's evidence into the run (each role writes its own key).
     const roleEvidence: RoleEvidence = {
-      machine: isObj(body.machine) ? { hostname: String(body.machine.hostname ?? ""), osVersion: String(body.machine.osVersion ?? "") } : undefined,
+      machine: isObj(body.machine)
+        ? { hostname: String(body.machine.hostname ?? ""), os: String(body.machine.os ?? machine.os), osVersion: String(body.machine.osVersion ?? "") }
+        : undefined,
       items: capItems(isObj(body.items) ? body.items : {}),
       ...(isObj(body.lockdown) ? { lockdown: body.lockdown as LockdownStatus } : {}),
     };

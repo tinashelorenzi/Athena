@@ -13,6 +13,7 @@ export type SessionPolicy = {
   checks: { practice: boolean; maxPractice: number; cooldownSeconds: number; showResults: ShowResults };
 };
 
+/** os: "ubuntu" | "kali" | "any" (src/lib/labs/os.ts). */
 export type MachineRole = { os: string; versions: string[]; packages: string[] };
 
 export type ParamSpec =

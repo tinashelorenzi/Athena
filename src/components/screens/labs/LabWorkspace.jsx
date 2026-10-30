@@ -14,6 +14,7 @@ import { TechniqueTags } from '@/components/attack/TechniqueTags';
 import { StudentTopBar } from '@/components/screens/student/StudentTopBar';
 import { StackList } from '@/components/ds/StackList';
 import { cancelLab, checkLab, endLab, startLab } from '@/app/actions/labs';
+import { osLabel, osName, roleMismatch } from '@/lib/labs/os';
 import { useNow } from './clock';
 
 const { Text, Paragraph } = Typography;
@@ -124,26 +125,29 @@ function StartCard({ scenario, roles, machines, defaults, policy, last, committe
             type="info"
             showIcon
             title="Link a machine first"
-            description={<>This lab runs on your own Ubuntu VM. <Link href="/machines">Add a machine</Link>, then come back.</>}
+            description={<>This lab runs on your own {[...new Set(roles.map((r) => osName(r.os)))].join(' and ')} VM{roles.length > 1 ? 's' : ''}. <Link href="/machines">Add a machine</Link>, then come back.</>}
           />
         ) : (
-          roles.map(({ role, versions }) => {
+          roles.map(({ role, os, versions }) => {
             const chosen = machines.find((m) => m.id === assignments[role]);
             return (
               <Flex key={role} vertical gap={4}>
-                <Text strong>{roles.length > 1 ? `Machine for "${role}"` : 'Machine'}</Text>
+                <Text strong>
+                  {roles.length > 1 ? `Machine for "${role}"` : 'Machine'}
+                  <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal', marginInlineStart: 8 }}>{osName(os)}{versions.length ? ` ${versions.join(' / ')}` : ''}</Text>
+                </Text>
                 <Select
                   value={assignments[role]}
                   onChange={(v) => setAssignments((a) => ({ ...a, [role]: v }))}
                   placeholder="Choose one of your machines"
                   options={machines.map((m) => ({
                     value: m.id,
-                    disabled: versions.length > 0 && !versions.includes(m.osVersion),
+                    disabled: roleMismatch(role, { os, versions }, m) !== null,
                     label: (
                       <Flex gap={8} align="center">
                         <Badge status={m.online ? 'success' : 'default'} />
                         <span>{m.label}</span>
-                        <Text type="secondary" style={{ fontSize: 12 }}>Ubuntu {m.osVersion}</Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>{osLabel(m.os, m.osVersion)}</Text>
                       </Flex>
                     ),
                   }))}

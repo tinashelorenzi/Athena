@@ -46,7 +46,7 @@ function installScript(base: string, version: string): string {
 #   curl -fsSL ${base}/agent/install.sh | sudo bash
 #   curl -fsSL ${base}/agent/install.sh | sudo bash -s -- --email you@example.com --code XXXX-XXXX
 #
-# Downloads the agent for this CPU and checks its SHA-256. On Debian/Ubuntu it
+# Downloads the agent for this CPU and checks its SHA-256. On Debian, Ubuntu and Kali it
 # installs the zaio .deb (so \`apt remove zaio\` works and restores anything a
 # lab session turned off); elsewhere it installs the binary to
 # /usr/local/bin/zaio. Then it runs \`zaio setup\` to link this machine (any
@@ -69,9 +69,10 @@ command -v sha256sum >/dev/null || die "sha256sum is required (apt install coreu
 # Read os-release in a subshell: it defines VERSION, NAME, ID … which would clobber ours.
 OS_ID="$( (. /etc/os-release 2>/dev/null && echo "\${ID:-}") || true)"
 OS_NAME="$( (. /etc/os-release 2>/dev/null && echo "\${PRETTY_NAME:-}") || true)"
-if [ "$OS_ID" != "ubuntu" ]; then
-  echo "warning: labs are built for Ubuntu 22.04/24.04 (this is \${OS_NAME:-an unknown system})" >&2
-fi
+case "$OS_ID" in
+  ubuntu|kali) ;;
+  *) echo "warning: labs are built for Ubuntu 22.04/24.04 and Kali Linux (this is \${OS_NAME:-an unknown system})" >&2 ;;
+esac
 
 if command -v dpkg >/dev/null 2>&1; then
   NAME="zaio_\${ZAIO_VERSION}_$ARCH.deb"

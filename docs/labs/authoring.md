@@ -55,6 +55,7 @@ session:                    # optional
 
 machines:                   # the roles a student fills with their enrolled machines
   web: { os: ubuntu, versions: ["22.04", "24.04"], packages: [nginx, snort] }
+  # attacker: { os: kali }  # os: ubuntu (default), kali or any — see kali.md
 
 params:                     # per-student values, stored the first time a student opens the lab
   token:    { type: token, length: 6, unique: cohort }

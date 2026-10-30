@@ -423,10 +423,15 @@ Only `collect` (rendered) and `lifecycle` (rendered) ever leave Athena.
 ```yaml
 machines:
   web:
-    os: ubuntu
-    versions: ["22.04", "24.04"]
+    os: ubuntu                      # ubuntu (default) | kali | any — see kali.md
+    versions: ["22.04", "24.04"]    # exact or prefix ("24" → 24.04, "2025" → Kali 2025.x)
     packages: [nginx, snort]        # warn at start if missing (not a failure)
+  attacker:
+    os: kali
 ```
+
+A session won't start on a machine whose OS or version doesn't fit the role
+(`os_unsupported`). Kali support: [kali.md](./kali.md).
 
 ### 9.2 `params`
 
@@ -599,7 +604,7 @@ Semantics:
 
 **CEL environment** (`@marcbachmann/cel-js`): every `gather` name and `parse`
 name is a variable; plus `param`, `session` (`startedAt`, `nonce`), and
-`machine.<role>` (`hostname`, `osVersion`). Extra functions: `cidrContains`,
+`machine.<role>` (`hostname`, `os`, `osVersion`). Extra functions: `cidrContains`,
 `semverGte`, `lines(s)`, `count(s, sub)`, `sha256(s)`. CEL always terminates
 and has no side effects, so lab authors can't hang or break the grader.
 
