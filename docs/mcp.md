@@ -86,7 +86,9 @@ Claude Desktop or the API.
 | `set_submission_committed` | Lock a submission, or re-open it so the student can redo it. |
 | `override_lab_score` | Adjust a finished lab session's score with a reason (audited); `null` clears it. |
 | `preview_lab_regrade`, `apply_lab_regrade` | Re-run a lab's checks over stored evidence (`target`: `own` version or `latest`), previewing the score changes, then saving them. |
-| `autobuild` | Build from a bundle (below). |
+| `create_upload_url` | A one-off link, plus curl commands, to upload a bundle **zip file** to the auto-builder (below). |
+| `get_upload_result` | What the last upload through such a link returned. |
+| `autobuild` | Build from a bundle sent inside the tool call (below). |
 
 Grading works as it does on the Grading page. The auto-grade (from flag points,
 or a lab's final score) is a suggestion, and nothing reaches students until a
@@ -95,7 +97,7 @@ releasing grades or applying a re-grade to many students.
 
 ## Building with the auto-builder
 
-`autobuild` takes the same bundles as **Scenarios → Auto-build**:
+Claude takes the same bundles as **Scenarios → Auto-build**:
 
 - **SOC Dojo or Assessment:** a folder with `scenario.json`, `brief.md`, logs,
   alerts, endpoints and a guide ([autobuild.md](./autobuild.md)). Each build
@@ -105,42 +107,60 @@ releasing grades or applying a re-grade to many students.
   ([labs/building-labs.md](./labs/building-labs.md)). A lab whose slug already
   exists gets a **new version**, as with a re-upload.
 
-Send the bundle as either:
+### Uploading a zip file
 
-- `zip_base64`: a zip whose root holds the bundle's folder:
+MCP tool calls carry JSON, not files, so Claude uploads a zip in two steps:
 
-  ```
-  bundle.zip
-  └── my-lab/
-      ├── scenario.json
-      ├── brief.md
-      └── lab/…
-  ```
+1. Claude calls `create_upload_url`. Athena returns a one-off upload link and
+   two ready-to-run commands:
 
-  A zip of the folder's contents (`scenario.json` at the top) works too.
-  `__MACOSX/` and `.DS_Store` are skipped.
+   ```bash
+   curl -sS --data-binary "@bundle.zip" "https://<your-athena>/api/mcp/upload/up_…?dry_run=1"
+   curl -sS --data-binary "@bundle.zip" "https://<your-athena>/api/mcp/upload/up_…"
+   ```
+
+2. Claude runs them from a shell: the dry run first, then the build. The output
+   is the result (errors, the lab's check report, and `adminUrl` for the new
+   scenario). `get_upload_result` shows it again.
+
+The zip holds the bundle's folder at its root:
+
+```
+bundle.zip
+└── my-lab/
+    ├── scenario.json
+    ├── brief.md
+    └── lab/…
+```
+
+A zip of the folder's contents (`scenario.json` at the top) works too, and
+`__MACOSX/` and `.DS_Store` are skipped. Up to 95 MB; behind nginx this needs
+`client_max_body_size 100M;` ([deploy.md](./deploy.md)).
+
+The link needs no other credentials: it acts as the architect whose key asked
+for it. It lasts 30 minutes, and a build that saves something uses it up. Dry
+runs and refused bundles don't use it up, so Claude can fix the bundle and
+send it again. It returns HTTP 422 for a refused bundle and 410 once the link
+is used up or expired.
+
+This needs Claude to have a shell, as in Claude Code or Claude Desktop with a
+terminal tool. Scripts that hold the MCP key can skip the link and POST the
+zip to `/api/mcp/autobuild` with the key in the `Authorization` header (same
+`?dry_run=1`, same answer).
+
+### Sending the bundle in the tool call
+
+`autobuild` takes the bundle inside the call, which suits a bundle Claude
+writes itself:
+
 - `files`: a list of `{ "path": "lab/lab.yaml", "content": "…" }`, with paths
-  relative to the bundle folder and `"encoding": "base64"` for binary files.
-  Handy when Claude writes the bundle itself.
+  relative to the bundle folder and `"encoding": "base64"` for binary files;
+- or `zip_base64`, for a small zip (a few hundred KB at most; use an upload
+  link for anything real).
 
 `dry_run: true` validates everything and saves nothing. For a lab it returns the
 full check report (errors, warnings, reference gate), as `npm run lab:check`
 does. A failed build comes back as an error with the same report.
-
-### Big bundles
-
-Base64 in a tool call is fine up to a few MB. For bigger bundles (up to 95 MB),
-POST the zip to `/api/mcp/autobuild` with the same key. Claude Code can do this
-from your terminal:
-
-```bash
-curl -fsS -H "Authorization: Bearer $ATHENA_MCP_KEY" --data-binary @bundle.zip "https://<your-athena>/api/mcp/autobuild?dry_run=1"
-```
-
-Drop `?dry_run=1` to build. A multipart upload (`-F file=@bundle.zip`) works
-too. The answer is the same JSON as the tool's, with `adminUrl` linking to the
-scenario, and HTTP 422 when the bundle is refused. Behind nginx this needs
-`client_max_body_size 100M;` ([deploy.md](./deploy.md)).
 
 ## How it works
 
@@ -150,7 +170,7 @@ scenario, and HTTP 422 when the bundle is refused. Behind nginx this needs
 | Settings tab, create/revoke | `src/components/screens/settings/McpSection.jsx`, `createMcpKey` / `revokeMcpKey` in `src/app/actions/apikeys.ts` |
 | The endpoint | `src/app/api/mcp/route.ts`; protocol in `src/lib/mcp/server.ts`; auth in `src/lib/mcp/auth.ts`; what the server tells clients in `src/lib/mcp/info.ts` |
 | Tools | `src/lib/mcp/tools.ts` |
-| Zip upload endpoint | `src/app/api/mcp/autobuild/route.ts` |
+| Zip uploads: upload links (`McpUpload`, migration `20261030220000_mcp_uploads`) and the endpoints | `src/lib/mcp/uploads.ts`, `src/app/api/mcp/upload/[token]/route.ts` (link), `src/app/api/mcp/autobuild/route.ts` (key) |
 | Shared with the app | `src/lib/autobuild.ts` (the Auto-builder, also behind the page's action), `src/lib/grading.ts` (`gradeSubmissionAs`, …), `src/lib/labs/admin.ts` |
 
 The server speaks MCP's Streamable HTTP transport statelessly. Each client

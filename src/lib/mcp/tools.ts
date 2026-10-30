@@ -10,6 +10,7 @@ import { LabError } from "@/lib/labs/sessions";
 import { briefScriptNames, scriptFileNames } from "@/lib/labs/scripts";
 import type { CompiledLab } from "@/lib/labs/language/types";
 import { autoBuildBundle, bundleFromZip, type BundleEntry } from "@/lib/autobuild";
+import { createUpload, UPLOAD_TTL_MINUTES } from "./uploads";
 import { argBool, argEnum, argNum, argStr, argStrList, page, ToolContent, ToolError, type Tool } from "./server";
 
 /**
@@ -598,16 +599,64 @@ function bundleFromFiles(list: unknown): BundleEntry[] {
   });
 }
 
+const BUNDLE_KINDS = [
+  "A bundle is a folder whose scenario.json says what to build:",
+  "• SOC Dojo or Assessment: scenario.json with title, type (DOJO or ASSESSMENT), brief, flags, logs/alerts bundles, endpoints, guide (docs/autobuild.md). This always creates a NEW scenario.",
+  '• Lab Dojo or Assessment: scenario.json with "kind": "LAB" and type, plus brief.md, lab/lab.yaml, reference/*.json, scripts/ (docs/labs/building-labs.md). A lab whose slug exists gets a new version.',
+].join("\n");
+
+const createUploadUrl: Tool = {
+  name: "create_upload_url",
+  title: "Get a link to upload a bundle zip",
+  description: [
+    "THE WAY TO UPLOAD A ZIP FILE to the auto-builder. Use it whenever the bundle is a .zip file (or a folder you can zip) on disk: tool calls can't carry files, so this returns a one-off upload URL and the curl commands to send the zip to it from a shell. No other credentials are needed.",
+    "The zip's root holds the bundle's folder (bundle.zip → my-lab/scenario.json, my-lab/lab/lab.yaml, …). A zip of the folder's contents works too.",
+    BUNDLE_KINDS,
+    `Run the dry-run command first: it checks the bundle and saves nothing. Then run the build command. The curl output is the result (errors, the lab check report, the new scenario's adminUrl); get_upload_result shows it again. The link lasts ${UPLOAD_TTL_MINUTES} minutes and is used up by a successful build; dry runs and refused bundles don't use it up, so fix and resend.`,
+  ].join("\n"),
+  inputSchema: { type: "object", properties: { filename: { type: "string", description: "The zip's path, to fill into the commands (default bundle.zip)." } } },
+  annotations: { destructiveHint: false, idempotentHint: false },
+  run: async (args, actor) => {
+    const file = (argStr(args, "filename") || "bundle.zip").replace(/["`$]/g, "");
+    const up = await createUpload(actor.id);
+    // Double quotes work the same in bash, cmd and PowerShell (as curl.exe).
+    return {
+      uploadId: up.id,
+      uploadUrl: up.url,
+      expiresAt: iso(up.expiresAt),
+      dryRun: `curl -sS --data-binary "@${file}" "${up.url}?dry_run=1"`,
+      build: `curl -sS --data-binary "@${file}" "${up.url}"`,
+      note: "Send the zip file itself (--data-binary), not base64; a multipart upload (-F file=@bundle.zip) works too. In Windows PowerShell write curl.exe, not curl.",
+    };
+  },
+};
+
+const getUploadResult: Tool = {
+  name: "get_upload_result",
+  title: "Result of a zip upload",
+  description: "The result of the last upload through a create_upload_url link: whether it was a dry run or a build, any errors, the lab check report and the scenario it built.",
+  inputSchema: { type: "object", properties: { upload_id: { type: "string" } }, required: ["upload_id"] },
+  annotations: { readOnlyHint: true },
+  run: async (args, actor) => {
+    const up = await prisma.mcpUpload.findFirst({ where: { id: argStr(args, "upload_id", true), userId: actor.id } });
+    if (!up) throw new ToolError("No upload with that id (of yours).");
+    return {
+      uploadId: up.id,
+      state: up.usedAt ? "built (link used up)" : up.expiresAt.getTime() < Date.now() ? "expired" : up.result ? "tried, link still open" : "nothing uploaded yet",
+      expiresAt: iso(up.expiresAt),
+      scenarioId: up.scenarioId,
+      lastResult: up.result,
+    };
+  },
+};
+
 const autobuild: Tool = {
   name: "autobuild",
   title: "Build from a bundle (auto-builder)",
   description: [
-    "Upload a bundle to the auto-builder, exactly like dropping its folder on the Auto-builder page.",
-    "A bundle is a folder whose scenario.json says what to build:",
-    "• SOC Dojo or Assessment: scenario.json with title, type (DOJO or ASSESSMENT), brief, flags, logs/alerts bundles, endpoints, guide (docs/autobuild.md). This always creates a NEW scenario.",
-    '• Lab Dojo or Assessment: scenario.json with "kind": "LAB" and type, plus brief.md, lab/lab.yaml, lab/reference/*.json, scripts/ (docs/labs/building-labs.md). A lab whose slug exists gets a new version.',
-    "Send it one of two ways: zip_base64, a base64 .zip whose root holds the bundle's folder (my-bundle/scenario.json, …); or files, a list of { path, content, encoding } with paths relative to the bundle folder (scenario.json, lab/lab.yaml, …; encoding 'base64' for binary files, default utf8).",
-    "For big bundles, POST the zip to /api/mcp/autobuild instead (see the server instructions).",
+    "Build from a bundle sent INSIDE the tool call, exactly like dropping its folder on the Auto-builder page. To upload a .zip file from disk, use create_upload_url instead.",
+    BUNDLE_KINDS,
+    "Send it one of two ways: files, a list of { path, content, encoding } with paths relative to the bundle folder (scenario.json, lab/lab.yaml, …; encoding 'base64' for binary files, default utf8), handy for a bundle you're writing yourself; or zip_base64, a small base64 .zip whose root holds the bundle's folder.",
     "Set dry_run: true to validate without saving anything. Errors and, for labs, the full check report come back in the result.",
   ].join("\n"),
   inputSchema: {
@@ -671,5 +720,7 @@ export const TOOLS: Tool[] = [
   overrideLabScore,
   previewLabRegrade,
   applyLabRegrade,
+  createUploadUrl,
+  getUploadResult,
   autobuild,
 ];

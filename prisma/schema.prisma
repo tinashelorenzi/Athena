@@ -55,6 +55,7 @@ model User {
   labSessions  LabSession[]
   labScriptLinks LabScriptLink[]
   apiKeys      ApiKey[]
+  mcpUploads   McpUpload[]
 
   @@index([cohortId])
   @@map("users")
@@ -414,6 +415,27 @@ model ApiKey {
 enum ApiKeyKind {
   INTEGRATION
   MCP
+}
+
+/// A short-lived upload link an MCP client asks for (`create_upload_url`), so
+/// it can send a bundle zip to the auto-builder with curl instead of as base64
+/// in a tool call (docs/mcp.md). Only the token's SHA-256 hash is stored. It
+/// acts as `userId`, works until `expiresAt`, and is used up by a build that
+/// saves something (dry runs and refused bundles don't use it up).
+model McpUpload {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  /// The last attempt's result (the same JSON the upload answered with).
+  result     Json?
+  scenarioId String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("mcp_uploads")
 }
 
 /// An authenticated login session. The browser holds an opaque random token;

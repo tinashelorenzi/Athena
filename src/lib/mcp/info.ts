@@ -21,9 +21,10 @@ Grading:
 - Lab scores: override_lab_score adjusts one finished session (with a reason); preview_lab_regrade, then apply_lab_regrade, re-runs checks over stored evidence.
 - Confirm with the instructor before releasing grades or applying a re-grade to many students.
 
-Building: autobuild takes a bundle (a zip whose root is the bundle's folder, or a list of files) and builds a SOC Dojo/Assessment or a lab Dojo/Assessment, as the Auto-builder page does. Run it with dry_run: true first. SOC bundles always create a new scenario; a lab bundle whose slug exists adds a new version. For a zip too big to send as base64 (more than a few MB), POST it with the same key instead:
-  curl -fsS -H "Authorization: Bearer $ATHENA_MCP_KEY" --data-binary @bundle.zip "${base}/api/mcp/autobuild?dry_run=1"
-(drop ?dry_run=1 to build). Bundle formats: ${base}/api/examples/autobuild-bundle has an example SOC bundle; the docs are docs/autobuild.md and docs/labs/building-labs.md in the Athena repository.
+Building: the auto-builder builds a SOC Dojo/Assessment or a lab Dojo/Assessment from a bundle, as the Auto-builder page does. SOC bundles always create a new scenario; a lab bundle whose slug exists adds a new version.
+- A .zip FILE on disk (its root holds the bundle's folder: bundle.zip → my-lab/scenario.json, …): call create_upload_url, then run the curl commands it returns from a shell, dry run first. Tool calls can't carry files, so don't base64 a zip into autobuild.
+- A bundle you're writing yourself: autobuild with files (paths relative to the bundle folder), dry_run: true first.
+Bundle formats: ${base}/api/examples/autobuild-bundle has an example SOC bundle; the docs are docs/autobuild.md and docs/labs/building-labs.md in the Athena repository.
 
 Links: a scenario's page is ${base}/admin/scenarios/<scenario id>; grading is ${base}/admin/grading.`,
   };
