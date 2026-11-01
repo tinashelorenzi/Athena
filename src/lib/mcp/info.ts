@@ -21,6 +21,12 @@ Grading:
 - Lab scores: override_lab_score adjusts one finished session (with a reason); preview_lab_regrade, then apply_lab_regrade, re-runs checks over stored evidence.
 - Confirm with the instructor before releasing grades or applying a re-grade to many students.
 
+Editing labs (as on the lab's page; every change is audited):
+- Who can see it: set_lab_visibility with cohorts (released cohorts only), public (listed for every student) or link_only (hidden: unlisted, opened by its link; Dojos only). set_lab_cohorts releases it to exactly the cohorts given.
+- Checks change only as a new version: get_lab for the lab.yaml, test_lab_edit, then publish_lab_edit (it must pass the reference gate).
+- update_lab_details edits the title, description, techniques and brief in place; save_lab_script / upload_lab_file and their delete tools manage scripts and files. A folder re-upload replaces the title and brief, so suggest updating the bundle too.
+- Confirm with the instructor before changing what students see (visibility, release, publishing a version, editing a live brief).
+
 Building: the auto-builder builds a SOC Dojo/Assessment or a lab Dojo/Assessment from a bundle, as the Auto-builder page does. SOC bundles always create a new scenario; a lab bundle whose slug exists adds a new version.
 - A .zip FILE on disk (its root holds the bundle's folder: bundle.zip → my-lab/scenario.json, …): call create_upload_url, then run the curl commands it returns from a shell, dry run first. Tool calls can't carry files, so don't base64 a zip into autobuild.
 - A bundle you're writing yourself: autobuild with files (paths relative to the bundle folder), dry_run: true first.

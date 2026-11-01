@@ -7,6 +7,8 @@ import { getObjectStream } from "@/lib/storage";
 import { getGradingQueue, gradeSubmissionAs, setGradeReleasedAs, setSubmissionCommittedAs, type GradeChange, type QueueItem } from "@/lib/grading";
 import { applyRegrade, getSessionDetail, listLabSessions, previewRegrade, setScoreOverride, type RegradeTarget } from "@/lib/labs/admin";
 import { LabError } from "@/lib/labs/sessions";
+import { publishEdit, runEditor, type EditorSource } from "@/lib/labs/editor";
+import { deleteLabFileAs, deleteLabScriptAs, saveLabFileAs, saveLabScriptAs, setLabCohortsAs, setLabVisibilityAs, updateLabDetailsAs, type Manage } from "@/lib/labs/manage";
 import { briefScriptNames, scriptFileNames } from "@/lib/labs/scripts";
 import type { CompiledLab } from "@/lib/labs/language/types";
 import { autoBuildBundle, bundleFromZip, type BundleEntry } from "@/lib/autobuild";
@@ -702,6 +704,206 @@ export async function autoBuildResult(res: Awaited<ReturnType<typeof autoBuildBu
   return out;
 }
 
+// ── Editing labs ─────────────────────────────────────────────────────────────
+
+const labRef = {
+  scenario_id: { type: "string", description: "The lab's scenario id (from list_scenarios)." },
+  slug: { type: "string", description: "Or the lab's slug." },
+};
+
+/** Throw a manage.ts refusal as a tool error; otherwise pass the result on. */
+function managed<T extends object>(res: Manage<T>): { ok: true } & T {
+  if (!res.ok) throw new ToolError(res.error);
+  return res;
+}
+
+const VISIBILITY = {
+  cohorts: { exposure: "ROLLOUT", hidden: false },
+  public: { exposure: "PUBLIC", hidden: false },
+  link_only: { exposure: "PUBLIC", hidden: true },
+} as const;
+
+const setLabVisibility: Tool = {
+  name: "set_lab_visibility",
+  title: "Change who can see a lab",
+  description:
+    "Set a lab's exposure, as on its page in Athena. visibility: `cohorts` (only students in the cohorts it's released to; see set_lab_cohorts), `public` (listed for every student), or `link_only` (hidden: any student can open it with its link, but it's on nobody's list; Dojo labs only). The change is audited and kept when the lab is re-uploaded. Returns the student link.",
+  inputSchema: {
+    type: "object",
+    properties: { ...labRef, visibility: { type: "string", enum: Object.keys(VISIBILITY) } },
+    required: ["visibility"],
+  },
+  annotations: { idempotentHint: true },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    const visibility = argEnum(args, "visibility", Object.keys(VISIBILITY) as (keyof typeof VISIBILITY)[]);
+    if (!visibility) throw new ToolError("`visibility` is required: cohorts, public or link_only.");
+    const res = managed(await setLabVisibilityAs(actor.id, found.scenario.id, VISIBILITY[visibility]));
+    const cohorts = await prisma.cohortScenario.count({ where: { scenarioId: found.scenario.id } });
+    return {
+      ok: true, scenarioId: found.scenario.id, slug: found.slug, visibility, exposure: res.exposure, hidden: res.hidden,
+      studentLink: `${await getBaseUrl()}/learn/${found.scenario.id}`,
+      releasedToCohorts: cohorts,
+      note: visibility === "cohorts" && !cohorts ? "It isn't released to any cohort yet, so no student sees it: use set_lab_cohorts." : undefined,
+    };
+  },
+};
+
+const setLabCohorts: Tool = {
+  name: "set_lab_cohorts",
+  title: "Release a lab to cohorts",
+  description: "Release a lab to exactly these cohorts (ids from list_cohorts): cohorts not in the list lose it, so pass the full list. An empty list un-releases it everywhere. Audited.",
+  inputSchema: {
+    type: "object",
+    properties: { ...labRef, cohort_ids: { type: "array", items: { type: "string" } } },
+    required: ["cohort_ids"],
+  },
+  annotations: { idempotentHint: true },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    const ids = argStrList(args, "cohort_ids");
+    if (!ids) throw new ToolError("`cohort_ids` is required (a list; [] un-releases the lab).");
+    return { scenarioId: found.scenario.id, ...managed(await setLabCohortsAs(actor.id, found.scenario.id, ids)) };
+  },
+};
+
+const updateLabDetails: Tool = {
+  name: "update_lab_details",
+  title: "Edit a lab's title, description or brief",
+  description:
+    "Change a lab's card and brief without a new version. Give any of: title, description, brief (Markdown; its {{param.x}}, {{machine.<role>.hostname}} and {{script.x}} placeholders are checked against the latest lab.yaml and the lab's scripts), techniques (ATT&CK ids). Students see it at once. Audited. A later folder upload replaces these again, so remind the instructor to update their bundle too.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ...labRef,
+      title: { type: "string" },
+      description: { type: "string" },
+      brief: { type: "string" },
+      techniques: { type: "array", items: { type: "string" } },
+    },
+  },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    const input = {
+      title: argStr(args, "title"),
+      description: args.description === undefined ? undefined : String(args.description ?? ""),
+      brief: argStr(args, "brief"),
+      techniques: args.techniques,
+    };
+    return { scenarioId: found.scenario.id, ...managed(await updateLabDetailsAs(actor.id, found.id, input)) };
+  },
+};
+
+function editSource(args: Record<string, unknown>): EditorSource {
+  const runId = argStr(args, "check_run_id");
+  if (runId) return { kind: "run", runId };
+  return { kind: "reference", which: argEnum(args, "against", ["good", "broken"] as const, "good") ?? "good" };
+}
+
+const testLabEdit: Tool = {
+  name: "test_lab_edit",
+  title: "Try an edited lab.yaml",
+  description:
+    "Compile an edited lab.yaml (start from get_lab's labYaml) and grade it against evidence, without saving anything: the latest version's `good` (default) or `broken` reference, or a stored student check run (check_run_id, from get_lab_session). Returns compile errors and warnings, or the score and each check's result.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ...labRef,
+      lab_yaml: { type: "string" },
+      against: { type: "string", enum: ["good", "broken"] },
+      check_run_id: { type: "string" },
+    },
+    required: ["lab_yaml"],
+  },
+  annotations: { readOnlyHint: true },
+  run: async (args) => {
+    const found = await findLab(args);
+    const res = await lab(() => runEditor(found.id, argStr(args, "lab_yaml", true), editSource(args)));
+    return {
+      errors: res.errors, warnings: res.warnings, problem: res.problem, params: res.params,
+      result: res.result && { score: res.result.score, maxScore: res.result.maxScore, flags: res.result.flags, checks: res.result.checks },
+    };
+  },
+};
+
+const publishLabEditTool: Tool = {
+  name: "publish_lab_edit",
+  title: "Publish an edited lab.yaml",
+  description:
+    "Save an edited lab.yaml as the lab's next version, as the check editor in Athena does. It keeps the assets and reference evidence and must pass the same reference gate as an upload (the good reference scores full marks; the broken one gets what broken.expect.json says), or nothing is saved and the errors come back. With no good reference it's saved as a draft. Sessions started from then on use the new version; running ones keep theirs. Run test_lab_edit first. Audited.",
+  inputSchema: { type: "object", properties: { ...labRef, lab_yaml: { type: "string" } }, required: ["lab_yaml"] },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    const res = await lab(() => publishEdit(found.id, argStr(args, "lab_yaml", true), actor.id));
+    if (!res.ok) throw new ToolError(`Not published:\n${res.errors.map((e) => `- ${JSON.stringify(e)}`).join("\n")}`);
+    revalidatePath(`/admin/scenarios/${found.scenario.id}`);
+    return { ...res, scenarioId: found.scenario.id, adminUrl: `${await getBaseUrl()}/admin/scenarios/${found.scenario.id}` };
+  },
+};
+
+const saveLabScriptTool: Tool = {
+  name: "save_lab_script",
+  title: "Add or replace a lab script",
+  description:
+    "Add a bash script that students run with a per-student curl command, or replace one (docs/labs/scripts.md). name: letters, digits, - or _ (no .sh). It may use {{param.x}} and {{file.<name>}}. create: true refuses to overwrite an existing script. To hand it to students, put {{script.<name>}} in the brief (update_lab_details). Audited.",
+  inputSchema: {
+    type: "object",
+    properties: { ...labRef, name: { type: "string" }, content: { type: "string" }, create: { type: "boolean" } },
+    required: ["name", "content"],
+  },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    return managed(await saveLabScriptAs(actor.id, found.id, argStr(args, "name", true), argStr(args, "content", true), argBool(args, "create")));
+  },
+};
+
+const deleteLabScriptTool: Tool = {
+  name: "delete_lab_script",
+  title: "Delete a lab script",
+  description: "Delete a lab script. Refused while the brief still uses {{script.<name>}}. Students' links to it stop working. Audited.",
+  inputSchema: { type: "object", properties: { ...labRef, name: { type: "string" } }, required: ["name"] },
+  annotations: { destructiveHint: true },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    return managed(await deleteLabScriptAs(actor.id, found.id, argStr(args, "name", true)));
+  },
+};
+
+const MAX_TOOL_FILE_BYTES = 5 * 1024 * 1024;
+
+const uploadLabFileTool: Tool = {
+  name: "upload_lab_file",
+  title: "Add or replace a lab file",
+  description:
+    "Store a file the lab's scripts download with {{file.<name>}} (get_lab lists the names). Give `content` for text or `content_base64` for binary, up to 5 MB (bigger files: the lab's page in Athena). Needs object storage configured. Audited.",
+  inputSchema: {
+    type: "object",
+    properties: { ...labRef, filename: { type: "string" }, content: { type: "string" }, content_base64: { type: "string" } },
+    required: ["filename"],
+  },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    const text = typeof args.content === "string" ? args.content : undefined;
+    const b64 = argStr(args, "content_base64");
+    if ((text === undefined) === (b64 === undefined)) throw new ToolError("Give exactly one of `content` (text) or `content_base64`.");
+    const bytes = text !== undefined ? new TextEncoder().encode(text) : new Uint8Array(Buffer.from(b64 ?? "", "base64"));
+    if (bytes.length > MAX_TOOL_FILE_BYTES) throw new ToolError("That's over 5 MB: upload it on the lab's page in Athena.");
+    return managed(await saveLabFileAs(actor.id, found.id, argStr(args, "filename", true), bytes));
+  },
+};
+
+const deleteLabFileTool: Tool = {
+  name: "delete_lab_file",
+  title: "Delete a lab file",
+  description: "Delete a lab file by its name (as get_lab lists it). Refused while a script still uses {{file.<name>}}. Audited.",
+  inputSchema: { type: "object", properties: { ...labRef, name: { type: "string" } }, required: ["name"] },
+  annotations: { destructiveHint: true },
+  run: async (args, actor) => {
+    const found = await findLab(args);
+    return managed(await deleteLabFileAs(actor.id, found.id, argStr(args, "name", true)));
+  },
+};
+
 export const TOOLS: Tool[] = [
   whoami,
   listScenarios,
@@ -720,6 +922,15 @@ export const TOOLS: Tool[] = [
   overrideLabScore,
   previewLabRegrade,
   applyLabRegrade,
+  setLabVisibility,
+  setLabCohorts,
+  updateLabDetails,
+  testLabEdit,
+  publishLabEditTool,
+  saveLabScriptTool,
+  deleteLabScriptTool,
+  uploadLabFileTool,
+  deleteLabFileTool,
   createUploadUrl,
   getUploadResult,
   autobuild,
