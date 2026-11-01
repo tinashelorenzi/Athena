@@ -47,10 +47,10 @@ export async function verifyMcpKey(raw: string | null | undefined) {
 
   const key = await prisma.apiKey.findUnique({
     where: { keyHash: hashApiKey(raw) },
-    include: { user: { select: { id: true, email: true, name: true, role: true, isArchitect: true } } },
+    include: { user: { select: { id: true, email: true, name: true, role: true, isArchitect: true, disabledAt: true } } },
   });
   if (!key || key.revokedAt || key.kind !== "MCP" || !key.user) return null;
-  if (key.user.role !== "SUPER_ADMIN" || !key.user.isArchitect) return null;
+  if (key.user.role !== "SUPER_ADMIN" || !key.user.isArchitect || key.user.disabledAt) return null;
 
   await prisma.apiKey
     .update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })

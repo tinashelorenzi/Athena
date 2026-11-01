@@ -97,10 +97,10 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const session = await prisma.session.findUnique({
     where: { tokenHash: hashToken(token) },
     include: {
-      user: { select: { id: true, email: true, name: true, role: true, isArchitect: true, mustSetName: true } },
+      user: { select: { id: true, email: true, name: true, role: true, isArchitect: true, mustSetName: true, disabledAt: true } },
     },
   });
-  if (!session) return null;
+  if (!session || session.user.disabledAt) return null;
 
   if (session.expiresAt.getTime() < Date.now()) {
     // Expired — clean it up (DB write during render is fine; cookie clears on
@@ -109,7 +109,8 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     return null;
   }
 
-  return session.user;
+  const { id, email, name, role, isArchitect, mustSetName } = session.user;
+  return { id, email, name, role, isArchitect, mustSetName };
 });
 
 /** Require any authenticated user; redirect to /login otherwise. */

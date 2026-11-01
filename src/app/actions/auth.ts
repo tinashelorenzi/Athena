@@ -44,6 +44,8 @@ export async function login(
     return { error: "Invalid email or password." };
   }
 
+  if (user.disabledAt) return { error: "This account has been deactivated. Ask an architect to reactivate it." };
+
   await createSession(user.id);
 
   // Bulk-created accounts finish setup (name + optional password) first.

@@ -199,7 +199,7 @@ function CohortPicker({ cohorts, value, onChange }) {
   );
 }
 
-function CredentialDialog({ cred, onClose }) {
+export function CredentialDialog({ cred, onClose }) {
   return (
     <Modal
       open={!!cred}

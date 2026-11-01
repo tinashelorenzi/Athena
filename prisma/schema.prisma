@@ -40,6 +40,9 @@ model User {
   /// architects may author Dojo/Assessment scenarios. Granted via the
   /// `promote:architect` CLI script.
   isArchitect  Boolean   @default(false)
+  /// Set when an architect deactivates an instructor on the Staff page: they
+  /// can't sign in and their sessions, MCP keys and upload links stop working.
+  disabledAt   DateTime?
   /// Students belong to a cohort (a bootcamp class/group).
   cohortId     String?
   cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)

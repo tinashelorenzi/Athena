@@ -27,11 +27,11 @@ export async function createUpload(userId: string) {
 /** The upload a token belongs to, if it can still be used, with the user it acts as. */
 export async function findUpload(token: string) {
   if (!/^up_[A-Za-z0-9_-]{20,64}$/.test(token)) return { error: "This upload link doesn't exist.", status: 404 } as const;
-  const up = await prisma.mcpUpload.findUnique({ where: { tokenHash: hash(token) }, include: { user: { select: { id: true, role: true, isArchitect: true } } } });
+  const up = await prisma.mcpUpload.findUnique({ where: { tokenHash: hash(token) }, include: { user: { select: { id: true, role: true, isArchitect: true, disabledAt: true } } } });
   if (!up) return { error: "This upload link doesn't exist.", status: 404 } as const;
   if (up.usedAt) return { error: "This upload link was already used for a build. Ask for a new one (create_upload_url).", status: 410 } as const;
   if (up.expiresAt.getTime() < Date.now()) return { error: "This upload link has expired. Ask for a new one (create_upload_url).", status: 410 } as const;
-  if (up.user.role !== "SUPER_ADMIN" || !up.user.isArchitect) return { error: "The architect this link belongs to can't build any more.", status: 403 } as const;
+  if (up.user.role !== "SUPER_ADMIN" || !up.user.isArchitect || up.user.disabledAt) return { error: "The architect this link belongs to can't build any more.", status: 403 } as const;
   return { upload: up } as const;
 }
 
