@@ -9,9 +9,10 @@ other MCP client, can work in Athena on an instructor's behalf:
   adjust lab scores and re-grade labs;
 - **build**: upload a bundle to the [Auto-builder](./autobuild.md) as a zip, for
   SOC Dojos and Assessments and lab Dojos and Assessments;
-- **edit labs**: change who can see a lab (including hiding it so only its link
-  opens it), release it to cohorts, edit its title and brief, change its checks
-  as a new version, and manage its scripts and files.
+- **edit scenarios**: change who can see a SOC Dojo or Assessment or a lab
+  (including hiding it so only its link opens it), release it to cohorts, edit
+  its title, brief and (SOC) objectives, flags and report settings, change a
+  lab's checks as a new version, and manage a lab's scripts and files.
 
 Only **instructors with the architect permission** can use it. Each architect
 makes their own MCP keys, and a key acts as that architect: everything done
@@ -89,9 +90,9 @@ Claude Desktop or the API.
 | `set_submission_committed` | Lock a submission, or re-open it so the student can redo it. |
 | `override_lab_score` | Adjust a finished lab session's score with a reason (audited); `null` clears it. |
 | `preview_lab_regrade`, `apply_lab_regrade` | Re-run a lab's checks over stored evidence (`target`: `own` version or `latest`), previewing the score changes, then saving them. |
-| `set_lab_visibility` | Who can see a lab: `cohorts` (the cohorts it's released to), `public` (listed for every student) or `link_only` (hidden: not listed, opened by its link; Dojos only). Returns the student link. |
-| `set_lab_cohorts` | Release a lab to exactly these cohorts (others lose it; `[]` un-releases it). |
-| `update_lab_details` | A lab's title, description, ATT&CK techniques and brief, without a new version. The brief's placeholders are checked. |
+| `set_scenario_visibility` | Who can see a SOC scenario or a lab: `cohorts` (the cohorts it's released to), `public` (listed for every student) or `link_only` (hidden: not listed, opened by its link; Dojos only). Returns the student link. |
+| `set_scenario_cohorts` | Release a SOC scenario or a lab to exactly these cohorts (others lose it; `[]` un-releases it). |
+| `update_scenario_details` | Title, description, brief and ATT&CK techniques of any scenario; for SOC also type, realtime, report settings, objectives and flags. A lab's brief placeholders are checked. |
 | `test_lab_edit` | Compile an edited `lab.yaml` and grade it against the good or broken reference, or a student's check run. Saves nothing. |
 | `publish_lab_edit` | Save an edited `lab.yaml` as the next version, through the same reference gate as an upload. |
 | `save_lab_script`, `delete_lab_script` | Add, replace or delete a lab script ([labs/scripts.md](./labs/scripts.md)). |
@@ -105,25 +106,31 @@ or a lab's final score) is a suggestion, and nothing reaches students until a
 grade is released. The server tells the client to check with you before
 releasing grades or applying a re-grade to many students.
 
-## Editing labs
+## Editing scenarios and labs
 
-The lab-editing tools do what the lab's page in Athena does, with the same
-checks, and each change is written to the lab audit log (`lab_audit_events`:
-`LAB_VISIBILITY`, `LAB_COHORTS`, `LAB_DETAILS`, `LAB_EDITED`,
-`LAB_SCRIPT_SAVED`/`_DELETED`, `LAB_FILE_SAVED`/`_DELETED`) as done by the
-key's architect.
+The editing tools do what the scenario editor and the lab's page in Athena do,
+with the same checks (they share the code), and each change is written to the
+audit log (`lab_audit_events`, which also holds SOC changes:
+`SCENARIO_VISIBILITY`, `SCENARIO_COHORTS`, `SCENARIO_DETAILS`, `LAB_DETAILS`,
+`LAB_EDITED`, `LAB_SCRIPT_SAVED`/`_DELETED`, `LAB_FILE_SAVED`/`_DELETED`) as
+done by the key's architect. Saves from the scenario editor and the lab page
+are audited the same way.
 
-- **Visibility.** A Public lab that's hidden is *link only*: it's on no
-  student's list, but any student with its link (`/learn/<scenario id>`) can
-  open and run it. Assessments can't be hidden. Visibility is kept when the lab
-  is re-uploaded.
-- **Checks** change only as a new version: get the current `lab.yaml` with
-  `get_lab`, try the edit with `test_lab_edit`, then `publish_lab_edit`. The
-  good reference must still score full marks. Sessions already running keep
-  their version.
-- **Title, description, brief** change in place (`update_lab_details`), and
-  students see the change at once. Uploading the folder again replaces them,
-  so update the bundle too.
+- **Visibility** works the same for SOC scenarios and labs. A Public Dojo
+  that's hidden is *link only*: it's on no student's list, but any student with
+  its link (`/learn/<scenario id>`) can open it. Assessments can't be hidden.
+  A lab keeps its visibility when it's re-uploaded.
+- **Details** change in place (`update_scenario_details`), and students see the
+  change at once. For a SOC scenario that includes its type, objectives and
+  flags; a list you give replaces the whole list, and flags are renumbered, so
+  start from `get_scenario`. A SOC scenario's logs, alerts and endpoint data
+  can't be edited over MCP: build a new scenario with the auto-builder. A lab's
+  title and brief are replaced again by a folder upload, so update the bundle
+  too.
+- **A lab's checks** change only as a new version: get the current `lab.yaml`
+  with `get_lab`, try the edit with `test_lab_edit`, then `publish_lab_edit`.
+  The good reference must still score full marks. Sessions already running
+  keep their version.
 - **Scripts and files** are on the lab, not a version. A script the brief hands
   out (`{{script.x}}`) and a file a script downloads (`{{file.x}}`) can't be
   deleted until nothing uses them.
@@ -207,7 +214,7 @@ does. A failed build comes back as an error with the same report.
 | The endpoint | `src/app/api/mcp/route.ts`; protocol in `src/lib/mcp/server.ts`; auth in `src/lib/mcp/auth.ts`; what the server tells clients in `src/lib/mcp/info.ts` |
 | Tools | `src/lib/mcp/tools.ts` |
 | Zip uploads: upload links (`McpUpload`, migration `20261030220000_mcp_uploads`) and the endpoints | `src/lib/mcp/uploads.ts`, `src/app/api/mcp/upload/[token]/route.ts` (link), `src/app/api/mcp/autobuild/route.ts` (key) |
-| Shared with the app | `src/lib/autobuild.ts` (the Auto-builder, also behind the page's action), `src/lib/grading.ts` (`gradeSubmissionAs`, …), `src/lib/labs/admin.ts`, `src/lib/labs/manage.ts` (lab visibility, cohorts, details, scripts, files), `src/lib/labs/editor.ts` (check edits) |
+| Shared with the app | `src/lib/autobuild.ts` (the Auto-builder, also behind the page's action), `src/lib/grading.ts` (`gradeSubmissionAs`, …), `src/lib/labs/admin.ts`, `src/lib/labs/manage.ts` (visibility and cohorts of any scenario; a lab's details, scripts, files), `src/lib/scenario-edit.ts` (SOC details, also behind the scenario editor), `src/lib/labs/editor.ts` (check edits) |
 
 The server speaks MCP's Streamable HTTP transport statelessly. Each client
 message is one `POST /api/mcp` with a JSON-RPC body, answered with plain JSON:

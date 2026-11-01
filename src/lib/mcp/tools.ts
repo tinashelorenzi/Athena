@@ -8,7 +8,8 @@ import { getGradingQueue, gradeSubmissionAs, setGradeReleasedAs, setSubmissionCo
 import { applyRegrade, getSessionDetail, listLabSessions, previewRegrade, setScoreOverride, type RegradeTarget } from "@/lib/labs/admin";
 import { LabError } from "@/lib/labs/sessions";
 import { publishEdit, runEditor, type EditorSource } from "@/lib/labs/editor";
-import { deleteLabFileAs, deleteLabScriptAs, saveLabFileAs, saveLabScriptAs, setLabCohortsAs, setLabVisibilityAs, updateLabDetailsAs, type Manage } from "@/lib/labs/manage";
+import { deleteLabFileAs, deleteLabScriptAs, saveLabFileAs, saveLabScriptAs, setScenarioCohortsAs, setScenarioVisibilityAs, updateLabDetailsAs, type Manage } from "@/lib/labs/manage";
+import { updateScenarioDetailsAs, type ScenarioDetails } from "@/lib/scenario-edit";
 import { briefScriptNames, scriptFileNames } from "@/lib/labs/scripts";
 import type { CompiledLab } from "@/lib/labs/language/types";
 import { autoBuildBundle, bundleFromZip, type BundleEntry } from "@/lib/autobuild";
@@ -704,7 +705,7 @@ export async function autoBuildResult(res: Awaited<ReturnType<typeof autoBuildBu
   return out;
 }
 
-// ── Editing labs ─────────────────────────────────────────────────────────────
+// ── Editing scenarios and labs ─────────────────────────────────────────────────────────────
 
 const labRef = {
   scenario_id: { type: "string", description: "The lab's scenario id (from list_scenarios)." },
@@ -723,74 +724,126 @@ const VISIBILITY = {
   link_only: { exposure: "PUBLIC", hidden: true },
 } as const;
 
-const setLabVisibility: Tool = {
-  name: "set_lab_visibility",
-  title: "Change who can see a lab",
+const scenarioRef = {
+  scenario_id: { type: "string", description: "The scenario's id (from list_scenarios): a SOC Dojo or Assessment, or a lab." },
+  slug: { type: "string", description: "Or, for a lab, its slug." },
+};
+
+/** A SOC scenario or lab, by scenario_id (or a lab's slug). */
+async function findAnyScenario(args: Record<string, unknown>) {
+  const scenarioId = argStr(args, "scenario_id");
+  const slug = argStr(args, "slug");
+  if (!scenarioId && !slug) throw new ToolError("Give `scenario_id` (or a lab's `slug`).");
+  const s = scenarioId
+    ? await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { id: true, kind: true, type: true, title: true, lab: { select: { id: true, slug: true } } } })
+    : (await prisma.lab.findUnique({ where: { slug: slug! }, select: { scenario: { select: { id: true, kind: true, type: true, title: true, lab: { select: { id: true, slug: true } } } } } }))?.scenario;
+  if (!s) throw new ToolError(scenarioId ? "No scenario with that id." : `No lab with slug "${slug}".`);
+  return s;
+}
+
+const setScenarioVisibility: Tool = {
+  name: "set_scenario_visibility",
+  title: "Change who can see a scenario",
   description:
-    "Set a lab's exposure, as on its page in Athena. visibility: `cohorts` (only students in the cohorts it's released to; see set_lab_cohorts), `public` (listed for every student), or `link_only` (hidden: any student can open it with its link, but it's on nobody's list; Dojo labs only). The change is audited and kept when the lab is re-uploaded. Returns the student link.",
+    "Set who can see a SOC Dojo or Assessment, or a lab, as its page in Athena does. visibility: `cohorts` (only students in the cohorts it's released to; see set_scenario_cohorts), `public` (listed for every student), or `link_only` (hidden: not on any student's list, but any student with its link can open it; Dojos only). Audited. Returns the student link.",
   inputSchema: {
     type: "object",
-    properties: { ...labRef, visibility: { type: "string", enum: Object.keys(VISIBILITY) } },
+    properties: { ...scenarioRef, visibility: { type: "string", enum: Object.keys(VISIBILITY) } },
     required: ["visibility"],
   },
   annotations: { idempotentHint: true },
   run: async (args, actor) => {
-    const found = await findLab(args);
+    const s = await findAnyScenario(args);
     const visibility = argEnum(args, "visibility", Object.keys(VISIBILITY) as (keyof typeof VISIBILITY)[]);
     if (!visibility) throw new ToolError("`visibility` is required: cohorts, public or link_only.");
-    const res = managed(await setLabVisibilityAs(actor.id, found.scenario.id, VISIBILITY[visibility]));
-    const cohorts = await prisma.cohortScenario.count({ where: { scenarioId: found.scenario.id } });
+    const res = managed(await setScenarioVisibilityAs(actor.id, s.id, VISIBILITY[visibility]));
+    const cohorts = await prisma.cohortScenario.count({ where: { scenarioId: s.id } });
     return {
-      ok: true, scenarioId: found.scenario.id, slug: found.slug, visibility, exposure: res.exposure, hidden: res.hidden,
-      studentLink: `${await getBaseUrl()}/learn/${found.scenario.id}`,
+      ok: true, scenarioId: s.id, kind: s.kind, type: s.type, title: s.title, visibility, exposure: res.exposure, hidden: res.hidden,
+      studentLink: `${await getBaseUrl()}/learn/${s.id}`,
       releasedToCohorts: cohorts,
-      note: visibility === "cohorts" && !cohorts ? "It isn't released to any cohort yet, so no student sees it: use set_lab_cohorts." : undefined,
+      note: visibility === "cohorts" && !cohorts ? "It isn't released to any cohort yet, so no student sees it: use set_scenario_cohorts." : undefined,
     };
   },
 };
 
-const setLabCohorts: Tool = {
-  name: "set_lab_cohorts",
-  title: "Release a lab to cohorts",
-  description: "Release a lab to exactly these cohorts (ids from list_cohorts): cohorts not in the list lose it, so pass the full list. An empty list un-releases it everywhere. Audited.",
+const setScenarioCohorts: Tool = {
+  name: "set_scenario_cohorts",
+  title: "Release a scenario to cohorts",
+  description: "Release a SOC Dojo or Assessment, or a lab, to exactly these cohorts (ids from list_cohorts): cohorts not in the list lose it, so pass the full list (get_scenario shows the current one). An empty list un-releases it everywhere. Audited.",
   inputSchema: {
     type: "object",
-    properties: { ...labRef, cohort_ids: { type: "array", items: { type: "string" } } },
+    properties: { ...scenarioRef, cohort_ids: { type: "array", items: { type: "string" } } },
     required: ["cohort_ids"],
   },
   annotations: { idempotentHint: true },
   run: async (args, actor) => {
-    const found = await findLab(args);
+    const s = await findAnyScenario(args);
     const ids = argStrList(args, "cohort_ids");
-    if (!ids) throw new ToolError("`cohort_ids` is required (a list; [] un-releases the lab).");
-    return { scenarioId: found.scenario.id, ...managed(await setLabCohortsAs(actor.id, found.scenario.id, ids)) };
+    if (!ids) throw new ToolError("`cohort_ids` is required (a list; [] un-releases it).");
+    return { scenarioId: s.id, ...managed(await setScenarioCohortsAs(actor.id, s.id, ids)) };
   },
 };
 
-const updateLabDetails: Tool = {
-  name: "update_lab_details",
-  title: "Edit a lab's title, description or brief",
+const SOC_ONLY = ["type", "realtime", "report_required", "report_prompt", "objectives", "flags"] as const;
+
+const updateScenarioDetails: Tool = {
+  name: "update_scenario_details",
+  title: "Edit a scenario's details",
   description:
-    "Change a lab's card and brief without a new version. Give any of: title, description, brief (Markdown; its {{param.x}}, {{machine.<role>.hostname}} and {{script.x}} placeholders are checked against the latest lab.yaml and the lab's scripts), techniques (ATT&CK ids). Students see it at once. Audited. A later folder upload replaces these again, so remind the instructor to update their bundle too.",
+    "Edit a scenario in place, as the scenario editor does; give only what changes. Any scenario: title, description, brief (Markdown), techniques (ATT&CK ids). SOC Dojos and Assessments also: type (DOJO or ASSESSMENT), realtime, report_required, report_prompt, objectives (list of strings) and flags (list of { question, answer, points }); objectives and flags replace the whole list, so start from get_scenario, and flags are renumbered f1, f2, …. For a lab, the brief's placeholders are checked against its lab.yaml and scripts, and a later folder upload replaces these again. Students see changes at once. Audited. Visibility: set_scenario_visibility. A lab's checks: test_lab_edit / publish_lab_edit.",
   inputSchema: {
     type: "object",
     properties: {
-      ...labRef,
+      ...scenarioRef,
       title: { type: "string" },
       description: { type: "string" },
       brief: { type: "string" },
       techniques: { type: "array", items: { type: "string" } },
+      type: { type: "string", enum: ["DOJO", "ASSESSMENT"] },
+      realtime: { type: "boolean" },
+      report_required: { type: "boolean" },
+      report_prompt: { type: ["string", "null"] },
+      objectives: { type: "array", items: { type: "string" } },
+      flags: {
+        type: "array",
+        items: { type: "object", properties: { question: { type: "string" }, answer: { type: "string" }, points: { type: "number" } }, required: ["question", "answer"] },
+      },
     },
   },
   run: async (args, actor) => {
-    const found = await findLab(args);
-    const input = {
+    const s = await findAnyScenario(args);
+    const description = args.description === undefined ? undefined : String(args.description ?? "");
+    if (s.kind === "LAB") {
+      const given = SOC_ONLY.filter((k) => args[k] !== undefined);
+      if (given.length) throw new ToolError(`${given.join(", ")} can't be set on a lab (its type comes from its bundle, its checks from lab.yaml).`);
+      if (!s.lab) throw new ToolError("This lab has no versions yet.");
+      const input = { title: argStr(args, "title"), description, brief: argStr(args, "brief"), techniques: args.techniques };
+      return { scenarioId: s.id, kind: s.kind, ...managed(await updateLabDetailsAs(actor.id, s.lab.id, input)) };
+    }
+    const objectives = args.objectives === undefined ? undefined : argStrList(args, "objectives")!.map((text) => ({ text }));
+    let flags: ScenarioDetails["flags"];
+    if (args.flags !== undefined) {
+      if (!Array.isArray(args.flags)) throw new ToolError("`flags` must be a list of { question, answer, points }.");
+      flags = args.flags.map((f, i) => {
+        const o = (f ?? {}) as Record<string, unknown>;
+        if (typeof o.question !== "string" || typeof o.answer !== "string") throw new ToolError(`flags[${i}] needs a question and an answer (strings).`);
+        return { question: o.question, answer: o.answer, points: Number(o.points) || 0 };
+      });
+    }
+    const input: ScenarioDetails = {
       title: argStr(args, "title"),
-      description: args.description === undefined ? undefined : String(args.description ?? ""),
-      brief: argStr(args, "brief"),
+      description,
+      brief: typeof args.brief === "string" ? args.brief : undefined,
       techniques: args.techniques,
+      type: argEnum(args, "type", ["DOJO", "ASSESSMENT"] as const),
+      realtime: args.realtime === undefined ? undefined : argBool(args, "realtime"),
+      reportRequired: args.report_required === undefined ? undefined : argBool(args, "report_required"),
+      reportPrompt: args.report_prompt === undefined ? undefined : (args.report_prompt as string | null),
+      objectives,
+      flags,
     };
-    return { scenarioId: found.scenario.id, ...managed(await updateLabDetailsAs(actor.id, found.id, input)) };
+    return { scenarioId: s.id, kind: s.kind, ...managed(await updateScenarioDetailsAs(actor.id, s.id, input)) };
   },
 };
 
@@ -845,7 +898,7 @@ const saveLabScriptTool: Tool = {
   name: "save_lab_script",
   title: "Add or replace a lab script",
   description:
-    "Add a bash script that students run with a per-student curl command, or replace one (docs/labs/scripts.md). name: letters, digits, - or _ (no .sh). It may use {{param.x}} and {{file.<name>}}. create: true refuses to overwrite an existing script. To hand it to students, put {{script.<name>}} in the brief (update_lab_details). Audited.",
+    "Add a bash script that students run with a per-student curl command, or replace one (docs/labs/scripts.md). name: letters, digits, - or _ (no .sh). It may use {{param.x}} and {{file.<name>}}. create: true refuses to overwrite an existing script. To hand it to students, put {{script.<name>}} in the brief (update_scenario_details). Audited.",
   inputSchema: {
     type: "object",
     properties: { ...labRef, name: { type: "string" }, content: { type: "string" }, create: { type: "boolean" } },
@@ -922,9 +975,9 @@ export const TOOLS: Tool[] = [
   overrideLabScore,
   previewLabRegrade,
   applyLabRegrade,
-  setLabVisibility,
-  setLabCohorts,
-  updateLabDetails,
+  setScenarioVisibility,
+  setScenarioCohorts,
+  updateScenarioDetails,
   testLabEdit,
   publishLabEditTool,
   saveLabScriptTool,

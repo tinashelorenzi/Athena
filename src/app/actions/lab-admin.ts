@@ -7,7 +7,7 @@ import { applyRegrade, getSessionDetail, previewRegrade, setScoreOverride, type 
 import { editorSources, publishEdit, runEditor, type EditorRun, type EditorSource, type PublishResult } from "@/lib/labs/editor";
 import { LabError } from "@/lib/labs/sessions";
 import { saveSessionAsReference, type ReferenceKind, type SaveReferenceResult } from "@/lib/labs/reference";
-import { deleteLabFileAs, deleteLabScriptAs, saveLabFileAs, saveLabScriptAs, setLabCohortsAs, setLabVisibilityAs } from "@/lib/labs/manage";
+import { deleteLabFileAs, deleteLabScriptAs, saveLabFileAs, saveLabScriptAs, setScenarioCohortsAs, setScenarioVisibilityAs } from "@/lib/labs/manage";
 
 /* Instructor lab tools (docs/labs/spec.md 12–13). Viewing, overriding and
    re-grading need an instructor; editing checks needs an architect. */
@@ -84,13 +84,13 @@ export async function publishLabEdit(labId: string, yaml: string): Promise<Publi
 /** Who can see a lab — set from its page, and kept across re-uploads. */
 export async function setLabVisibility(scenarioId: string, exposure: "ROLLOUT" | "PUBLIC", hidden: boolean): Promise<{ ok: true } | Err> {
   const user = await requireArchitect();
-  return setLabVisibilityAs(user.id, scenarioId, { exposure, hidden });
+  return setScenarioVisibilityAs(user.id, scenarioId, { exposure, hidden });
 }
 
 /** Release a lab to exactly these cohorts (adds and removes bindings). */
 export async function setLabCohorts(scenarioId: string, cohortIds: string[]): Promise<{ ok: true } | Err> {
   const user = await requireArchitect();
-  return setLabCohortsAs(user.id, scenarioId, cohortIds);
+  return setScenarioCohortsAs(user.id, scenarioId, cohortIds);
 }
 
 /** Save a session's evidence as its lab version's good or broken reference. */

@@ -17,6 +17,8 @@ import {
   normalizeTechniques,
 } from "@/lib/scenario-schemas";
 import { newRefToken } from "@/lib/scenarios";
+import { updateScenarioDetailsAs } from "@/lib/scenario-edit";
+import { setScenarioVisibilityAs } from "@/lib/labs/manage";
 
 export type ScenarioFormState = { error?: string; ok?: string };
 
@@ -121,39 +123,27 @@ export async function updateScenarioBasics(
   _prevState: ScenarioFormState,
   formData: FormData,
 ): Promise<ScenarioFormState> {
-  await requireArchitect();
-
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return { error: "Title is required." };
+  const architect = await requireArchitect();
 
   const type = formData.get("type") === "ASSESSMENT" ? "ASSESSMENT" : "DOJO";
-  const techniques = normalizeTechniques(parseJsonArray(String(formData.get("techniquesJson") ?? "[]")));
-  const objectives = normalizeObjectives(
-    parseJsonArray(String(formData.get("objectivesJson") ?? "[]")) as { text: string }[],
-  );
-  const flags = normalizeFlags(
-    parseJsonArray(String(formData.get("flagsJson") ?? "[]")) as { question: string; answer: string; points?: number }[],
-  );
-
-  await prisma.scenario.update({
-    where: { id: scenarioId },
-    data: {
-      type,
-      title,
-      description: String(formData.get("description") ?? "").trim(),
-      exposure: formData.get("exposure") === "PUBLIC" ? "PUBLIC" : "ROLLOUT",
-      hidden: type === "DOJO" && formData.get("hidden") === "on",
-      realtime: formData.get("realtime") === "on",
-      brief: String(formData.get("brief") ?? ""),
-      reportRequired: formData.get("reportRequired") === "on",
-      reportPrompt: String(formData.get("reportPrompt") ?? "").trim() || null,
-      objectives,
-      flags,
-      techniques,
-    },
+  const details = await updateScenarioDetailsAs(architect.id, scenarioId, {
+    type,
+    title: String(formData.get("title") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    realtime: formData.get("realtime") === "on",
+    brief: String(formData.get("brief") ?? ""),
+    reportRequired: formData.get("reportRequired") === "on",
+    reportPrompt: String(formData.get("reportPrompt") ?? ""),
+    objectives: parseJsonArray(String(formData.get("objectivesJson") ?? "[]")) as { text: string }[],
+    flags: parseJsonArray(String(formData.get("flagsJson") ?? "[]")) as { question: string; answer: string; points?: number }[],
+    techniques: parseJsonArray(String(formData.get("techniquesJson") ?? "[]")),
   });
-
-  revalidatePath(`/admin/scenarios/${scenarioId}`);
+  if (!details.ok) return { error: details.error };
+  const visibility = await setScenarioVisibilityAs(architect.id, scenarioId, {
+    exposure: formData.get("exposure") === "PUBLIC" ? "PUBLIC" : "ROLLOUT",
+    hidden: type === "DOJO" && formData.get("hidden") === "on",
+  });
+  if (!visibility.ok) return { error: visibility.error };
   return { ok: "Scenario saved." };
 }
 

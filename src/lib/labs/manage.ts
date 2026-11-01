@@ -8,15 +8,17 @@ import { templateRefs } from "./language/template";
 import type { CompiledLab } from "./language/types";
 
 /**
- * Changing a lab after it's built: who can see it, its card and brief, its
- * scripts and files. Shared by the lab page's Server Actions and the MCP tools
+ * Changing a scenario after it's built: who can see it and which cohorts have
+ * it (SOC or lab), and a lab's card, brief, scripts and files (SOC details:
+ * src/lib/scenario-edit.ts). Shared by the lab page's Server Actions and the MCP tools
  * (docs/mcp.md), so both apply the same rules. Each change runs as `actorId`
- * (an architect; callers check) and is written to the lab audit log.
+ * (an architect; callers check) and is written to the audit log
+ * (lab_audit_events, which also holds SOC scenario changes).
  */
 
 export type Manage<T = object> = ({ ok: true } & T) | { ok?: false; error: string };
 
-const audit = (type: string, actorId: string, detail: Record<string, unknown>) =>
+export const audit = (type: string, actorId: string, detail: Record<string, unknown>) =>
   prisma.labAuditEvent.create({ data: { type, userId: actorId, detail: detail as object } });
 
 function refresh(scenarioId: string, list = false) {
@@ -27,25 +29,26 @@ function refresh(scenarioId: string, list = false) {
 export type Visibility = { exposure: "ROLLOUT" | "PUBLIC"; hidden: boolean };
 
 /**
- * Who can see a lab. ROLLOUT: the cohorts it's released to; PUBLIC: every
- * student. Hidden (Dojos only, as for SOC scenarios) keeps it off students'
- * lists, so only its link opens it. Kept across re-uploads.
+ * Who can see a scenario (SOC or lab). ROLLOUT: the cohorts it's released to;
+ * PUBLIC: every student. Hidden (Dojos only) keeps a public scenario off
+ * students' lists, so only its link opens it. A lab keeps it across re-uploads.
  */
-export async function setLabVisibilityAs(actorId: string, scenarioId: string, want: Visibility): Promise<Manage<Visibility>> {
+export async function setScenarioVisibilityAs(actorId: string, scenarioId: string, want: Visibility): Promise<Manage<Visibility>> {
   const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { kind: true, type: true, exposure: true, hidden: true } });
-  if (scenario?.kind !== "LAB") return { error: "No such lab." };
-  if (want.hidden && scenario.type !== "DOJO") return { error: "Only Dojo labs can be hidden: assessments are always listed to the students they're released to." };
+  if (!scenario) return { error: "No such scenario." };
+  if (want.hidden && scenario.type !== "DOJO") return { error: "Only Dojos can be hidden: assessments are always listed to the students they're released to." };
   const next: Visibility = { exposure: want.exposure === "PUBLIC" ? "PUBLIC" : "ROLLOUT", hidden: scenario.type === "DOJO" && want.hidden };
+  if (next.exposure === scenario.exposure && next.hidden === scenario.hidden) return { ok: true, ...next };
   await prisma.scenario.update({ where: { id: scenarioId }, data: next });
-  await audit("LAB_VISIBILITY", actorId, { scenarioId, from: { exposure: scenario.exposure, hidden: scenario.hidden }, to: next });
+  await audit("SCENARIO_VISIBILITY", actorId, { scenarioId, kind: scenario.kind, from: { exposure: scenario.exposure, hidden: scenario.hidden }, to: next });
   refresh(scenarioId, true);
   return { ok: true, ...next };
 }
 
-/** Release a lab to exactly these cohorts (adds and removes bindings). */
-export async function setLabCohortsAs(actorId: string, scenarioId: string, cohortIds: string[]): Promise<Manage<{ added: string[]; removed: string[] }>> {
+/** Release a scenario (SOC or lab) to exactly these cohorts (adds and removes bindings). */
+export async function setScenarioCohortsAs(actorId: string, scenarioId: string, cohortIds: string[]): Promise<Manage<{ added: string[]; removed: string[] }>> {
   const scenario = await prisma.scenario.findUnique({ where: { id: scenarioId }, select: { kind: true } });
-  if (scenario?.kind !== "LAB") return { error: "No such lab." };
+  if (!scenario) return { error: "No such scenario." };
   const wanted = (await prisma.cohort.findMany({ where: { id: { in: cohortIds } }, select: { id: true } })).map((c) => c.id);
   const unknown = cohortIds.filter((id) => !wanted.includes(id));
   if (unknown.length) return { error: `No cohort with id ${unknown.join(", ")}.` };
@@ -56,7 +59,7 @@ export async function setLabCohortsAs(actorId: string, scenarioId: string, cohor
     prisma.cohortScenario.deleteMany({ where: { scenarioId, cohortId: { in: removed } } }),
     prisma.cohortScenario.createMany({ data: added.map((cohortId) => ({ cohortId, scenarioId, boundById: actorId })), skipDuplicates: true }),
   ]);
-  if (added.length || removed.length) await audit("LAB_COHORTS", actorId, { scenarioId, added, removed });
+  if (added.length || removed.length) await audit("SCENARIO_COHORTS", actorId, { scenarioId, kind: scenario.kind, added, removed });
   refresh(scenarioId);
   for (const id of [...added, ...removed]) revalidatePath(`/admin/cohorts/${id}`);
   return { ok: true, added, removed };
